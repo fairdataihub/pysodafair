@@ -3,8 +3,8 @@ from os.path import join, getsize
 from openpyxl import load_workbook
 import shutil
 from .excel_utils import rename_headers, excel_columns
-import itertools
-from openpyxl.styles import PatternFill
+from copy import copy
+from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 from ...utils import validate_schema
 from .helpers import upload_metadata_file, get_template_path
 
@@ -44,14 +44,23 @@ def create_excel(
 
     populate_standards_info(ws1, soda)
 
-    keyword_array = populate_basic_info(ws1, soda)
-
-    populate_study_info(ws1, soda)
-    populate_contributor_info(ws1, soda)
-    populate_related_resource_information(ws1, soda)
+    keyword_array_len = populate_basic_info(ws1, soda)
+    study_arr_len = populate_study_info(ws1, soda)
+    contributor_arr_len = populate_contributor_info(ws1, soda)
+    related_resource_arr_len = populate_related_resource_information(ws1, soda)
     populate_funding_info(ws1, soda)
     populate_participant_information(ws1, soda)
     data_dictionary_information(ws1, soda)
+
+    max_len = max(
+        keyword_array_len,
+        study_arr_len,
+        contributor_arr_len,
+        related_resource_arr_len,
+    )
+
+    # 3 is the first value column position
+    extend_value_header(ws1, max_len, start_index=3)
 
     wb.save(destination)
 
@@ -167,22 +176,81 @@ def data_dictionary_information(workbook, soda):
     workbook["D44"] = data_dictionary_info.get("data_dictionary_type", "")
     workbook["D45"] = data_dictionary_info.get("data_dictionary_description", "")
 
-def grayout_subheaders(workbook, max_len, start_index):
+def grayout_subheaders(workbook, col):
     """
-    Gray out sub-header rows for values exceeding 3 (SDS2.0).
+    Gray out the cells at workbook[row][col] for the specified cells in 
+    positions 2, 3, 4, 7, 8, 9, 10, 13, 14, 15, 19, 20, 21, 22, 26, 27, 32, 37, 
+    38, 39, 40, 41, 42
     """
-    headers_list = ["4", "10", "18", "23", "28"]
-    columns_list = excel_columns(start_index=start_index)
+    gray_out_rows_for_column = [2, 3, 4, 7, 8, 9, 10, 13, 14, 15, 19, 20, 21, 22, 26, 27, 32, 37, 
+    38, 39, 40, 41, 42]
 
-    for (i, column), no in itertools.product(zip(range(2, max_len + 1), columns_list[1:]), headers_list):
-        cell = workbook[column + no]
-        fillColor("B2B2B2", cell)
-
-
-
+    for row in gray_out_rows_for_column:    
+        cell = workbook[col + str(row)]
+        if row in [4, 7, 15, 19, 27, 32, 37, 42]:
+            fillColor("b2b2b2", cell)
+        else:
+            fillColor("cccccc", cell)
 
 
 def fillColor(color, cell):
     colorFill = PatternFill(start_color=color, end_color=color, fill_type="solid")
 
     cell.fill = colorFill
+
+
+def apply_calibri_bold_12(cell):
+    """Apply Calibri Bold 12pt font formatting to a cell"""
+    calibri_bold_font = Font(name='Calibri', size=12, bold=True)
+    cell.font = calibri_bold_font
+
+
+def set_cell_alignment(cell, horizontal='left', vertical='top', wrap_text=False):
+    """Set text alignment for a cell
+    
+    Args:
+        cell: The cell to format
+        horizontal: 'left', 'center', 'right', 'justify', 'distributed'
+        vertical: 'top', 'center', 'bottom', 'justify', 'distributed'
+        wrap_text: Boolean to enable text wrapping
+    """
+    cell.alignment = Alignment(
+        horizontal=horizontal,
+        vertical=vertical,
+        wrap_text=wrap_text
+    )
+
+
+def apply_dashed_border(cell, workbook):
+    """Apply border copied from cell A1 to the target cell"""
+    # Copy the border from cell A1
+    cell.border = copy(workbook["A1"].border)
+    
+
+
+
+
+
+def extend_value_header(workbook, max_len, start_index):
+    """
+    The headers starting at G1 are the 'Value' headers that correspond to the maximum number of entries for either the 
+    keywords, contributor information, or data dictionary information arrays. This function extends those headers based on the max_len of the 
+    three arrays.
+    """
+
+    column_list = excel_columns(start_index=start_index)
+
+    # if max len is less than 4 then no need to extend headers
+    if max_len < 4:
+        return
+    
+    # replace the 4th value with header value 'Value 4' and so on for max len
+    for i in range(4, max_len + 1):
+        header_cell = workbook[column_list[i - 1] + "1"]
+        header_cell.value = f"Value {i}"
+        # make the new header blue
+        fillColor("9cc2e5", header_cell)
+        apply_calibri_bold_12(header_cell)
+        set_cell_alignment(header_cell, horizontal='center', vertical='center')
+        apply_dashed_border(header_cell, workbook)
+        grayout_subheaders(workbook, column_list[i - 1])
