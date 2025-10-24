@@ -3830,57 +3830,39 @@ def generate_manifest_file_locally(generate_purpose, soda):
 
 
 def generate_manifest_file_data(dataset_structure):
-    # Define common file extensions with special handling
     double_extensions = {
         ".ome.tiff", ".ome.tif", ".ome.tf2", ".ome.tf8", ".ome.btf", ".ome.xml",
         ".brukertiff.gz", ".mefd.gz", ".moberg.gz", ".nii.gz", ".mgh.gz", ".tar.gz", ".bcl.gz"
     }
 
-    # Helper function: Get the complete file extension
+    # Helper: Determine file extension (handles double extensions)
     def get_file_extension(filename):
         for ext in double_extensions:
             if filename.endswith(ext):
                 base_ext = os.path.splitext(os.path.splitext(filename)[0])[1]
                 return base_ext + ext
         return os.path.splitext(filename)[1]
-    
+
+    # Helper: Create a manifest row for a folder
     def create_folder_entry(folder_name, path_parts):
         full_path = "/".join(path_parts + [folder_name]) + "/"
-        entry = [
-            full_path.lstrip("/"),  # Remove leading slash for consistency
-            "", # Timestamp
-            "", # Description
-            "folder", # File type
-            "",  # Entity (empty)
-            "",  # Data modality (empty)
-            "",  # Also in dataset (empty)
-            "",  # Data dictionary path (empty)
-            "",  # Entity is transitive (empty)
-            "", # Additional Metadata
-        ]
-        return entry
-
-        
-
-    # Helper function: Build a single manifest entry
-    def create_file_entry(item, folder, path_parts, timestamp, filename):
-        full_path = "/".join(path_parts + [filename])
-        file_info = folder["files"][item]
-
-        entry = [
-            full_path.lstrip("/"),  # Remove leading slash for consistency
-            timestamp, # Timestamp
-            file_info["description"], # Description
-            get_file_extension(filename), # File type
-            "",  # Entity (empty)
-            "",  # Data modality (empty)
-            "",  # Also in dataset (empty)
-            "",  # Data dictionary path (empty)
-            "",  # Entity is transitive (empty)
-            file_info.get("additional-metadata", "") # Additional Metadata
+        return [
+            full_path.lstrip("/"),
+            "", "", "folder", "", "", "", "", "", ""
         ]
 
-        # Add any extra columns dynamically
+    # Helper: Create a manifest row for a file
+    def create_file_entry(file_name, file_info, path_parts, timestamp):
+        entry = [
+            "/".join(path_parts + [file_name]).lstrip("/"),
+            timestamp,
+            file_info["description"],
+            get_file_extension(file_name),
+            "", "", "", "", "",
+            file_info.get("additional-metadata", "")
+        ]
+
+        # Append any extra columns dynamically
         if "extra_columns" in file_info:
             for key, value in file_info["extra_columns"].items():
                 entry.append(value)
@@ -3889,48 +3871,36 @@ def generate_manifest_file_data(dataset_structure):
 
         return entry
 
-    # Recursive function: Traverse dataset and collect file data
+    # Recursive traversal of folders and files
     def traverse_folders(folder, path_parts):
-        # Add header row if processing files for the first time
         if not manifest_data:
             manifest_data.append(header_row)
-        
-        if "files" in folder:
-            for item, file_info in folder["files"].items():
 
-                if "path" in file_info:
-                    file_path = file_info["path"]
-                elif "pspath" in file_info:
-                    file_path = file_info["pspath"]
-                else: 
-                    continue 
+        # Process files
+        for file_name, file_info in folder.get("files", {}).items():
+            file_path = file_info.get("path")
+            if not file_path:
+                continue
+            if file_name in {"manifest.xlsx", "manifest.csv"}:
+                continue
 
-                # If the file is a manifest file, skip it
-                if item in {"manifest.xlsx", "manifest.csv"}:
-                    continue
+            if file_info["location"] == "ps":
+                timestamp = file_info["timestamp"]
+            else:
+                local_path = pathlib.Path(file_info["path"])
+                timestamp = datetime.fromtimestamp(
+                    local_path.stat().st_mtime, tz=local_timezone
+                ).isoformat().replace(".", ",").replace("+00:00", "Z")
 
-                # Determine timestamp 
-                filename = os.path.basename(file_path.replace("\\", "/"))
-                if file_info["location"] == "ps":
-                    timestamp = file_info["timestamp"]
-                else:
-                    local_path = pathlib.Path(file_info["path"])
-                    timestamp = datetime.fromtimestamp(
-                        local_path.stat().st_mtime, tz=local_timezone
-                    ).isoformat().replace(".", ",").replace("+00:00", "Z")
+            manifest_data.append(create_file_entry(file_name, file_info, path_parts, timestamp))
 
-                # Add file entry
-                manifest_data.append(create_file_entry(item, folder, path_parts, timestamp, filename))
+        # Process subfolders
+        for subfolder_name, subfolder in folder.get("folders", {}).items():
+            manifest_data.append(create_folder_entry(subfolder_name, path_parts))
+            traverse_folders(subfolder, path_parts + [subfolder_name])
 
-        if "folders" in folder:
-            for subfolder_name, subfolder in folder["folders"].items():
-                # Add folder entry
-                manifest_data.append(create_folder_entry(subfolder_name, path_parts))
-                traverse_folders(subfolder, path_parts + [subfolder_name])
-
-    # Initialize variables
-    manifest_data = []  # Collects all rows for the manifest
-    # TODO: Update to SDS 3.0
+    # Initialize manifest data and header
+    manifest_data = []
     header_row = [
         "filename", "timestamp", "description", "file type", "entity",
         "data modality", "also in dataset", "data dictionary path",
@@ -3938,13 +3908,9 @@ def generate_manifest_file_data(dataset_structure):
     ]
     local_timezone = TZLOCAL()
 
-    # Log the dataset structure
-
-    # Start recursive traversal from the root
     traverse_folders(dataset_structure, [])
 
     return manifest_data
-
 
 
 
