@@ -11,7 +11,7 @@
         },
         "timestamp": {
           "type": "string",
-          "description": "Timestamp of when the data was created or last modified. This should be in ISO 8601 format.",
+          "description": "Timestamp of when the data was created or last modified. This should be in ISO 8601 format. Per the SDS guidelines, commas are to be used for separating fractional seconds.",
           "pattern": "^[0-9]{4}-[0-1][0-9]-[0-3][0-9]T[0-2][0-9]:[0-6][0-9](:[0-6][0-9](,[0-9]{1,9})?)?(Z|[+-][0-2][0-9]:[0-6][0-9])$"
         },
         "description": {
