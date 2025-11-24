@@ -3888,9 +3888,11 @@ def generate_manifest_file_data(dataset_structure):
                 timestamp = file_info["timestamp"]
             else:
                 local_path = pathlib.Path(file_info["path"])
-                timestamp = datetime.fromtimestamp(
-                    local_path.stat().st_mtime, tz=local_timezone
-                ).isoformat().replace(".", ",").replace("+00:00", "Z")
+                # Create proper ISO 8601 timestamp
+                dt = datetime.fromtimestamp(local_path.stat().st_mtime, tz=local_timezone)
+                # per the SDS spec, replace '.' with ',' in the timestamp fractional seconds section
+                timestamp = dt.isoformat().replace(".", ",")
+
 
             manifest_data.append(create_file_entry(file_name, file_info, path_parts, timestamp))
 
