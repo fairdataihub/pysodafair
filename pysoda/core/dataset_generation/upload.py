@@ -40,7 +40,7 @@ from os.path import (
 import pandas as pd
 import time
 from timeit import default_timer as timer
-from datetime import timedelta
+from datetime import timedelta, timezone
 import shutil
 import subprocess
 import gevent
@@ -3889,9 +3889,9 @@ def generate_manifest_file_data(dataset_structure):
             else:
                 local_path = pathlib.Path(file_info["path"])
                 # Create proper ISO 8601 timestamp
-                dt = datetime.fromtimestamp(local_path.stat().st_mtime, tz=local_timezone)
+                dt = datetime.fromtimestamp(local_path.stat().st_mtime, tz=timezone.utc)
                 # per the SDS spec, replace '.' with ',' in the timestamp fractional seconds section
-                timestamp = dt.isoformat().replace(".", ",")
+                timestamp = dt.isoformat().replace(".", ",").replace("+00:00", "Z")
 
 
             manifest_data.append(create_file_entry(file_name, file_info, path_parts, timestamp))

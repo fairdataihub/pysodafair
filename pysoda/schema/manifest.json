@@ -25,7 +25,7 @@
         "entity": {
           "type": "string",
           "description": "Each ID should be taken from the subject.xlsx, samples.xlsx, sites.xlsx, or performances.xlsx files.",
-          "pattern": "^(pop-)?(sub|sam|site|perf)-[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$"
+          "pattern": "^((pop-)?(sub|sam|site|perf)-[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)?$"
         },
         "data_modality": {
           "type": "string",
