@@ -42,21 +42,23 @@ def create_excel(
         .get("dataset_type", "")
     )
 
-    populate_standards_info(ws1, soda)
+    standards_arr_len = populate_standards_info(ws1, soda)
 
-    keyword_array_len = populate_basic_info(ws1, soda)
+    keyword_funding_array_len = populate_basic_info(ws1, soda)
     study_arr_len = populate_study_info(ws1, soda)
     contributor_arr_len = populate_contributor_info(ws1, soda)
     related_resource_arr_len = populate_related_resource_information(ws1, soda)
     populate_funding_info(ws1, soda)
     populate_participant_information(ws1, soda)
-    data_dictionary_information(ws1, soda)
+    dict_arr_len = data_dictionary_information(ws1, soda)
 
     max_len = max(
-        keyword_array_len,
+        keyword_funding_array_len,
         study_arr_len,
         contributor_arr_len,
         related_resource_arr_len,
+        standards_arr_len,
+        dict_arr_len,
     )
 
     # 3 is the first value column position
@@ -102,9 +104,12 @@ def populate_study_info(workbook, soda):
 
 def populate_standards_info(workbook, soda):
     standards_info = soda["dataset_metadata"]["dataset_description"]["standards_information"]
-    workbook["D5"] = standards_info["data_standard"]
-    workbook["D6"] = standards_info["data_standard_version"]
+    # this is an array with multiple entries
+    for col, standard in zip(excel_columns(start_index=3), standards_info):
+        workbook[col + "5"] = standard.get("data_standard", "")
+        workbook[col + "6"] = standard.get("data_standard_version", "")
 
+    return max(1, len(standards_info))
 
 def populate_basic_info(workbook, soda):
     basic_info = soda["dataset_metadata"]["dataset_description"]["basic_information"]
@@ -117,12 +122,14 @@ def populate_basic_info(workbook, soda):
     for col, keyword in zip(excel_columns(start_index=3), keywords):
         workbook[f"{col}11"] = keyword
 
-    workbook["D12"] = basic_info.get("funding", "")
+    funding = basic_info.get("funding", [])
+    for col, funding_source in zip(excel_columns(start_index=3), funding):
+        workbook[f"{col}12"] = funding_source
     workbook["D13"] = basic_info.get("acknowledgments", "")
     workbook["D14"] = basic_info.get("license", "")
 
     # Return the length of the keywords array, or 1 if empty
-    return max(1, len(keywords))
+    return max(1, len(keywords), len(funding))
 
 
 def populate_funding_info(workbook, soda):
@@ -170,11 +177,14 @@ def data_dictionary_information(workbook, soda):
     It currently does not populate any data in the workbook.
     """
     # Placeholder for future implementation
-    data_dictionary_info = soda["dataset_metadata"]["dataset_description"].get("data_dictionary_information", {})
+    data_dictionary_info = soda["dataset_metadata"]["dataset_description"].get("data_dictionary_information", [])
 
-    workbook["D43"] = data_dictionary_info.get("data_dictionary_path", "")
-    workbook["D44"] = data_dictionary_info.get("data_dictionary_type", "")
-    workbook["D45"] = data_dictionary_info.get("data_dictionary_description", "")
+    for column, entry in zip(excel_columns(start_index=3), data_dictionary_info):
+        workbook[column + "43"] = entry.get("data_dictionary_path", "")
+        workbook[column + "44"] = entry.get("data_dictionary_type", "")
+        workbook[column + "45"] = entry.get("data_dictionary_description", "")
+
+    return max(1, len(data_dictionary_info))
 
 def grayout_subheaders(workbook, col):
     """
@@ -226,9 +236,6 @@ def apply_dashed_border(cell, workbook):
     # Copy the border from cell A1
     cell.border = copy(workbook["A1"].border)
     
-
-
-
 
 
 def extend_value_header(workbook, max_len, start_index):

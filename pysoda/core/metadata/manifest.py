@@ -21,7 +21,7 @@ def create_excel(soda, upload_boolean, local_destination):
     wb = load_workbook(destination)
     ws1 = wb["Sheet1"]
     manifest = soda["dataset_metadata"]["manifest_file"]
-    # validate_schema(manifest, SCHEMA_NAME_MANIFEST)
+    validate_schema(manifest, SCHEMA_NAME_MANIFEST)
     ascii_headers = excel_columns(start_index=0)
     custom_headers_to_column = {}
 
