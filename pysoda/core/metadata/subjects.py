@@ -96,7 +96,7 @@ def create_excel(soda, upload_boolean, local_destination):
         ws1[ascii_headers[15] + str(row)] = subject.get("age_range_max", "")
         ws1[ascii_headers[15] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
-        ws1[ascii_headers[16] + str(row)] = subject.get("body_mass", "")
+        ws1[ascii_headers[16] + str(row)] = normalize_body_mass(subject.get("body_mass", ""))
         ws1[ascii_headers[16] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
         ws1[ascii_headers[17] + str(row)] = subject.get("genotype", "")
@@ -170,3 +170,31 @@ def create_excel(soda, upload_boolean, local_destination):
         upload_metadata_file(SDS_FILE_SUBJECTS, soda, destination, True)
 
     return {size: size}
+
+
+
+def normalize_body_mass(subject):
+    """
+    Ensures that each subject's 'body_mass' field is normalized to a string for Excel export.
+    Handles cases where 'body_mass' is a string, number, or an object with 'value' and 'unit'.
+    Modifies the soda['dataset_metadata']['subjects'] list in place.
+    """
+    bm = subject.get("body_mass", "")
+    # If already a string or empty, leave as is
+    if isinstance(bm, str):
+        return bm
+    # If a number, convert to string
+    if isinstance(bm, (int, float)):
+        return str(bm)
+    # If an object with value and unit
+    if isinstance(bm, dict):
+            value = bm.get("value")
+            unit = bm.get("unit")
+            if value is not None and unit:
+                return f"{value} {unit}"
+            elif value is not None:
+                return str(value)
+            else:
+                return ""
+    else:
+        return ""
