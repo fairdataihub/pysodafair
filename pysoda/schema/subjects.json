@@ -10,7 +10,7 @@
         "subject_id": {
           "type": "string",
           "description": "Unique identifier for the subject. This should be a unique identifier for the subject within the dataset.",
-          "minLength": 1
+          "pattern": "^(pop-)?sub-[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$"
         },
         "pool_id": {
           "type": "string",
@@ -26,11 +26,11 @@
         },
         "sex": {
           "type": "string",
-          "description": "Sex of the subject."
+          "description": "Sex of the subject. Can be represented as freetext or a CURIE or IRI from a standard ontology such as PATO."
         },
         "species": {
           "type": "string",
-          "description": "Species of the subject. This should be the scientific name of the species."
+          "description": "Species of the subject. This should be the scientific name of the species. For example CURIE or IRI from NCBI taxonomy or something free form."
         },
         "strain": {
           "type": "string",
@@ -46,7 +46,7 @@
         },
         "also_in_dataset": {
           "type": "string",
-          "description": "Indicates if the subject is also part of another dataset."
+          "description": "Indicates if the subject is also part of another dataset. Should be a DOI or https link to another dataset or an other identifier."
         },
         "member_of": {
           "type": "string",
@@ -73,8 +73,24 @@
           "description": "Maximum age range of the subject."
         },
         "body_mass": {
-          "type": "string",
-          "description": "Body mass of the subject."
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "Body mass of the subject."
+            },
+            {
+              "type": "number",
+              "description": "Body mass of the subject."
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": { "type": "string" },
+                "value": { "type": "number" },
+                "unit": { "type": "string" }
+              }
+            }
+          ]
         },
         "genotype": {
           "type": "string",
@@ -118,7 +134,11 @@
         },
         "protocol_url_or_doi": {
           "type": "string",
-          "description": "URL or DOI of the protocol used for the subject."
+          "description": "URL or DOI of the protocol used for the subject.",
+          "anyOf": [
+            { "pattern": "^(https?)://([^s/]+)/([^s]*)$" },
+            { "pattern": "^doi:10\\.\\d{4,9}/[-._;()/:A-Z0-9]+$" }
+          ]
         }
       },
       "required": ["subject_id"],
