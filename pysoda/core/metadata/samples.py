@@ -49,7 +49,7 @@ def create_excel(soda, upload_boolean, local_destination):
         ws1[ascii_headers[5] + str(row)] = sample.get("sample_type", "")
         ws1[ascii_headers[5] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
-        ws1[ascii_headers[6] + str(row)] = sample.get("sample_anatomical_location", "")
+        ws1[ascii_headers[6] + str(row)] = handle_anatomical_location_field(sample)
         ws1[ascii_headers[6] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
         ws1[ascii_headers[7] + str(row)] = sample.get("also_in_dataset", "")
@@ -124,61 +124,9 @@ def create_excel(soda, upload_boolean, local_destination):
     return size
 
 
-# soda = {
-#     "dataset_metadata": {
-#         "samples": [
-#             {
-#                 "sample_id": "sample_1",
-#                 "subject_id": "subject_1",
-#                 "was_derived_from": "derived_from_1",
-#                 "pool_id": "pool_1",
-#                 "sample_experimental_group": "experimental_group_1",
-#                 "sample_type": "type_1",
-#                 "sample_anatomical_location": "location_1",
-#                 "also_in_dataset": "dataset_1",
-#                 "member_of": "member_1",
-#                 "metadata_only": "False",
-#                 "laboratory_internal_id": "internal_id_1",
-#                 "date_of_derivation": "2023-01-01",
-#                 "experimental_log_file_path": "/path/to/log/file",
-#                 "reference_atlas": "/path/to/atlas",
-#                 "pathology": "pathology_1",
-#                 "laterality": "left",
-#                 "cell_type": "cell_type_1",
-#                 "plane_of_section": "plane_1",
-#                 "protocol_title": "protocol_title_1",
-#                 "protocol_url_or_doi": "/path/to/protocol",
-#                 "custom_field_1": "custom_value_1",
-#             },
-#             {
-#                 "sample_id": "sample_2",
-#                 "subject_id": "subject_2",
-#                 "was_derived_from": "derived_from_2",
-#                 "pool_id": "pool_2",
-#                 "sample_experimental_group": "experimental_group_2",
-#                 "sample_type": "type_2",
-#                 "sample_anatomical_location": "location_2",
-#                 "also_in_dataset": "dataset_2",
-#                 "member_of": "member_2",
-#                 "metadata_only": "True",
-#                 "laboratory_internal_id": "internal_id_2",
-#                 "date_of_derivation": "2023-02-01",
-#                 "experimental_log_file_path": "/path/to/log/file2",
-#                 "reference_atlas": "/path/to/atlas2",
-#                 "pathology": "pathology_2",
-#                 "laterality": "right",
-#                 "cell_type": "cell_type_2",
-#                 "plane_of_section": "plane_2",
-#                 "protocol_title": "protocol_title_2",
-#                 "protocol_url_or_doi": "/path/to/protocol2",
-#                 "custom_field_1": "custom_value_12",
 
-#             }
-#         ]
-#     }
-# }
-
-# try:
-#     create_excel(soda, False, "samples.xlsx")
-# except Exception as e:
-#     print(f"An error occurred: {e}")
+def handle_anatomical_location_field(sample):
+    anatomical_location = sample.get("sample_anatomical_location", "")
+    if isinstance(anatomical_location, list):
+        return " ".join(anatomical_location)
+    return anatomical_location
