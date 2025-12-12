@@ -3460,10 +3460,7 @@ def validate_dataset_structure(soda, resume):
             connect_pennsieve_client(accountname)
         except Exception as e:
             main_curate_status = "Done"
-            if isinstance(e, AttributeError):
-                raise Exception("The Pennsieve Agent cannot access datasets but needs to in order to work. Please try again. If the issue persists, please contact the SODA team. The SODA team will contact Pennsieve to help resolve this issue.")
-            else:
-                raise PennsieveAccountInvalid("Please select a valid Pennsieve account.")
+            raise e
 
     if uploading_to_existing_ps_dataset(soda):
         # check that the Pennsieve dataset is valid
