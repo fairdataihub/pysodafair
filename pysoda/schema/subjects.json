@@ -121,7 +121,7 @@
           "description": "URL or DOI of the protocol used for the subject."
         }
       },
-      "required": ["subject_id"],
+      "required": ["subject_id", "species"],
       "additionalProperties": {
         "type": "string",
         "description": "Additional properties for the subject. This can include any other relevant information about the subject that is not covered by the predefined fields."
