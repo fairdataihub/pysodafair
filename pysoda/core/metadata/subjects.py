@@ -117,7 +117,7 @@ def create_excel(soda, upload_boolean, local_destination):
         ws1[ascii_headers[22] + str(row)] = subject.get("experiment_date", "")
         ws1[ascii_headers[22] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
-        ws1[ascii_headers[23] + str(row)] = subject.get("disease_or_disorder", "")
+        ws1[ascii_headers[23] + str(row)] = subject.get("disease", "")
         ws1[ascii_headers[23] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
         ws1[ascii_headers[24] + str(row)] = subject.get("intervention", "")
