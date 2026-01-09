@@ -116,7 +116,7 @@
           "type": "string",
           "description": "Date of the experiment involving the subject."
         },
-        "disease_or_disorder": {
+        "disease": {
           "type": "string",
           "description": "Disease or disorder associated with the subject."
         },
@@ -146,7 +146,7 @@
           ]
         }
       },
-      "required": ["subject_id"],
+      "required": ["subject_id", "species"],
       "additionalProperties": {
         "type": "string",
         "description": "Additional properties for the subject. This can include any other relevant information about the subject that is not covered by the predefined fields."

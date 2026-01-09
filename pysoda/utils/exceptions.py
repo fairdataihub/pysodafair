@@ -17,6 +17,7 @@ class PennsieveAgentError(Exception):
     def __str__(self):
         return self.error_message
     
+
 class PennsieveAgentRPCError(Exception):
     def __init__(self, error_message):
         self.error_message = error_message
@@ -127,7 +128,7 @@ class PennsieveDatasetNameInvalid(Exception):
 class PennsieveAccountInvalid(Exception):
     def __init__(self, account_name):
         self.account_name = account_name
-        self.error_message = f"The Pennsieve account name {self.account_name} is invalid."
+        self.error_message = f"The Pennsieve account name {self.account_name} is invalid. Please try again. If the issue persists, please contact the SODA team."
 
     def __str__(self):
         return self.error_message

@@ -16,3 +16,9 @@ def connect_pennsieve_client(account_name):
             raise PennsieveAccountInvalid("Please select a valid Pennsieve account.") from e
         elif "Error connecting to server" in str(e):
             raise PennsieveAgentError(f"Could not connect to the Pennsieve agent: {e}") from e
+        elif "Profile not found" in str(e):
+            raise PennsieveAccountInvalid(account_name) from e
+        elif "Error connecting to server" in str(e):
+            raise PennsieveAgentError(f"Could not connect to the Pennsieve agent: {e}") from e
+        else:
+            raise PennsieveAgentError("An unknown error occurred when trying to connect to the Pennsieve Agent. If this issue persists, please contact the SODA team.") from e
