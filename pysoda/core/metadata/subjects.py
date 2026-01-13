@@ -178,17 +178,16 @@ def normalize_body_mass(body_mass_value):
     Ensures that a body_mass value is normalized to a string for Excel export.
     Handles cases where 'body_mass' is a string, number, or an object with 'value' and 'unit'.
     """
-    bm = body_mass_value
     # If already a string or empty, leave as is
-    if isinstance(bm, str):
-        return bm
+    if isinstance(body_mass_value, str):
+        return body_mass_value
     # If a number, convert to string
-    if isinstance(bm, (int, float)):
-        return str(bm)
+    if isinstance(body_mass_value, (int, float)):
+        return str(body_mass_value)
     # If an object with value and unit
-    if isinstance(bm, dict):
-            value = bm.get("value")
-            unit = bm.get("unit")
+    if isinstance(body_mass_value, dict):
+            value = body_mass_value.get("value")
+            unit = body_mass_value.get("unit")
             if value is not None and unit:
                 return f"{value} {unit}"
             elif value is not None:
