@@ -1,6 +1,6 @@
 from .constants import METADATA_UPLOAD_PS_PATH, TEMPLATE_PATH, SDS_FILE_CODE_DESCRIPTION, SCHEMA_NAME_CODE_DESCRIPTION
 from .excel_utils import rename_headers, excel_columns
-from openpyxl.styles import PatternFill
+from openpyxl.styles import PatternFill, Font
 from os.path import join, getsize
 from openpyxl import load_workbook
 import shutil
@@ -53,27 +53,47 @@ def populate_input_output_information(ws1, soda):
 
     excel_ascii = excel_columns(start_index=3)[0]
     ws1[excel_ascii + str(row)] = input_output_information["number_of_inputs"]
+    ws1[excel_ascii + str(row)].font = Font(bold=False, size=11, name="Arial")
 
     for input, column in zip(input_output_information["inputs"], excel_columns(start_index=3)):
         row = 28
         ws1[column + str(row)] = input["input_parameter_name"]
+        ws1[column + str(row)].font = Font(bold=False, size=11, name="Arial")
+        
         ws1[column + str(row + 1)] = input["input parameter type"]
+        ws1[column + str(row + 1)].font = Font(bold=False, size=11, name="Arial")
+        
         ws1[column + str(row + 2)] = input["input_parameter_description"]
+        ws1[column + str(row + 2)].font = Font(bold=False, size=11, name="Arial")
+        
         ws1[column + str(row + 3)] = input["input_units"]
+        ws1[column + str(row + 3)].font = Font(bold=False, size=11, name="Arial")
+        
         ws1[column + str(row + 4)] = input["input_default_value"]
+        ws1[column + str(row + 4)].font = Font(bold=False, size=11, name="Arial")
 
     # populate number of outputs into row 34
     row = 34
     ws1[excel_ascii + str(row)] = input_output_information["number_of_outputs"]
+    ws1[excel_ascii + str(row)].font = Font(bold=False, size=11, name="Arial")
 
     # populate the outputs from row 35 - 39
     for output, column in zip(input_output_information["outputs"], excel_columns(start_index=3)):
         row = 35
         ws1[column + str(row)] = output["output_parameter_name"]
+        ws1[column + str(row)].font = Font(bold=False, size=11, name="Arial")
+        
         ws1[column + str(row + 1)] = output["output_parameter_type"]
+        ws1[column + str(row + 1)].font = Font(bold=False, size=11, name="Arial")
+        
         ws1[column + str(row + 2)] = output["output_parameter_description"]
+        ws1[column + str(row + 2)].font = Font(bold=False, size=11, name="Arial")
+        
         ws1[column + str(row + 3)] = output["output_units"]
+        ws1[column + str(row + 3)].font = Font(bold=False, size=11, name="Arial")
+        
         ws1[column + str(row + 4)] = output["output_default_value"]
+        ws1[column + str(row + 4)].font = Font(bold=False, size=11, name="Arial")
 
 
 def populate_basic_information(ws1, soda):
@@ -83,9 +103,16 @@ def populate_basic_information(ws1, soda):
     row = 2
     for info, column in zip(basic_information, excel_columns(start_index=3)):
         ws1[column + str(row)] = info["RRID_term"]
+        ws1[column + str(row)].font = Font(bold=False, size=11, name="Arial")
+        
         ws1[column + str(row + 1)] = info["RRID_identifier"]
+        ws1[column + str(row + 1)].font = Font(bold=False, size=11, name="Arial")
+        
         ws1[column + str(row + 2)] = info["ontology_term"]
+        ws1[column + str(row + 2)].font = Font(bold=False, size=11, name="Arial")
+        
         ws1[column + str(row + 3)] = info["ontology_identifier"]
+        ws1[column + str(row + 3)].font = Font(bold=False, size=11, name="Arial")
 
 
 def populate_ten_simple_rules(ws1, soda):
@@ -94,10 +121,19 @@ def populate_ten_simple_rules(ws1, soda):
     ascii_cols = excel_columns(start_index=3)
     for _, rule in ten_simple_rules.items():
         ws1[ascii_cols[0] + str(row)] = rule.get("Link", "")
+        ws1[ascii_cols[0] + str(row)].font = Font(bold=False, size=11, name="Arial")
+        
         ws1[ascii_cols[1] + str(row)] = rule.get("Rating", "")
+        ws1[ascii_cols[1] + str(row)].font = Font(bold=False, size=11, name="Arial")
+        
         ws1[ascii_cols[2] + str(row)] = rule.get("Target", "")
+        ws1[ascii_cols[2] + str(row)].font = Font(bold=False, size=11, name="Arial")
+        
         ws1[ascii_cols[3] + str(row)] = rule.get("Target Justification", "")
+        ws1[ascii_cols[3] + str(row)].font = Font(bold=False, size=11, name="Arial")
+        
         ws1[ascii_cols[4] + str(row)] = rule.get("Text", "")
+        ws1[ascii_cols[4] + str(row)].font = Font(bold=False, size=11, name="Arial")
         row += 1
 
 
