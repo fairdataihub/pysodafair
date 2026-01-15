@@ -56,6 +56,10 @@
           "type": "string",
           "description": "Indicates if this entry is metadata only."
         },
+        "number_of_directly_derived_samples": {
+          "type": "string",
+          "description": "Number of samples directly derived from this sample."
+        },
         "laboratory_internal_id": {
           "type": "string",
           "description": "Internal identifier used by the laboratory for the subject."

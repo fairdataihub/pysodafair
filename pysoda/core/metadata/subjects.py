@@ -84,53 +84,56 @@ def create_excel(soda, upload_boolean, local_destination):
         ws1[ascii_headers[11] + str(row)] = subject.get("metadata_only", "")
         ws1[ascii_headers[11] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
-        ws1[ascii_headers[12] + str(row)] = subject.get("laboratory_internal_id", "")
+        ws1[ascii_headers[12] + str(row)] = subject.get("number_of_directly_derived_samples", "")
         ws1[ascii_headers[12] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
-        ws1[ascii_headers[13] + str(row)] = subject.get("date_of_birth", "")
+        ws1[ascii_headers[13] + str(row)] = subject.get("laboratory_internal_id", "")
         ws1[ascii_headers[13] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
-        ws1[ascii_headers[14] + str(row)] = subject.get("age_range_min", "")
+        ws1[ascii_headers[14] + str(row)] = subject.get("date_of_birth", "")
         ws1[ascii_headers[14] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
-        ws1[ascii_headers[15] + str(row)] = subject.get("age_range_max", "")
+        ws1[ascii_headers[15] + str(row)] = subject.get("age_range_min", "")
         ws1[ascii_headers[15] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
-        ws1[ascii_headers[16] + str(row)] = normalize_body_mass(subject.get("body_mass", ""))
+        ws1[ascii_headers[16] + str(row)] = subject.get("age_range_max", "")
         ws1[ascii_headers[16] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
-        ws1[ascii_headers[17] + str(row)] = subject.get("genotype", "")
+        ws1[ascii_headers[17] + str(row)] = normalize_body_mass(subject.get("body_mass", ""))
         ws1[ascii_headers[17] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
-        ws1[ascii_headers[18] + str(row)] = subject.get("phenotype", "")
+        ws1[ascii_headers[18] + str(row)] = subject.get("genotype", "")
         ws1[ascii_headers[18] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
-        ws1[ascii_headers[19] + str(row)] = subject.get("handedness", "")
+        ws1[ascii_headers[19] + str(row)] = subject.get("phenotype", "")
         ws1[ascii_headers[19] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
-        ws1[ascii_headers[20] + str(row)] = subject.get("reference_atlas", "")
+        ws1[ascii_headers[20] + str(row)] = subject.get("handedness", "")
         ws1[ascii_headers[20] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
-        ws1[ascii_headers[21] + str(row)] = subject.get("experimental_log_file_path", "")
+        ws1[ascii_headers[21] + str(row)] = subject.get("reference_atlas", "")
         ws1[ascii_headers[21] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
-        ws1[ascii_headers[22] + str(row)] = subject.get("experiment_date", "")
+        ws1[ascii_headers[22] + str(row)] = subject.get("experimental_log_file_path", "")
         ws1[ascii_headers[22] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
-        ws1[ascii_headers[23] + str(row)] = subject.get("disease", "")
+        ws1[ascii_headers[23] + str(row)] = subject.get("experiment_date", "")
         ws1[ascii_headers[23] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
-        ws1[ascii_headers[24] + str(row)] = subject.get("intervention", "")
+        ws1[ascii_headers[24] + str(row)] = subject.get("disease", "")
         ws1[ascii_headers[24] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
-        ws1[ascii_headers[25] + str(row)] = subject.get("disease_model", "")
+        ws1[ascii_headers[25] + str(row)] = subject.get("intervention", "")
         ws1[ascii_headers[25] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
-        ws1[ascii_headers[26] + str(row)] = subject.get("protocol_title", "")
+        ws1[ascii_headers[26] + str(row)] = subject.get("disease_model", "")
         ws1[ascii_headers[26] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
-        ws1[ascii_headers[27] + str(row)] = subject.get("protocol_url_or_doi", "")
+        ws1[ascii_headers[27] + str(row)] = subject.get("protocol_title", "")
         ws1[ascii_headers[27] + str(row)].font = Font(bold=False, size=11, name="Arial")
+
+        ws1[ascii_headers[28] + str(row)] = subject.get("protocol_url_or_doi", "")
+        ws1[ascii_headers[28] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
         # handle custom fields
         for field_name, field in subject.items():
@@ -146,17 +149,17 @@ def create_excel(soda, upload_boolean, local_destination):
 
                 # create the column header in the excel file
                 offset_from_final_sds_header = custom_headers_to_column[field_name]
-                ws1[ascii_headers[27 + offset_from_final_sds_header] + "1"] = field_name
-                ws1[ascii_headers[27 + offset_from_final_sds_header] + "1"].fill = orangeFill
-                ws1[ascii_headers[27 + offset_from_final_sds_header] + "1"].font = Font(bold=True, size=12, name="Calibri")
+                ws1[ascii_headers[28 + offset_from_final_sds_header] + "1"] = field_name
+                ws1[ascii_headers[28 + offset_from_final_sds_header] + "1"].fill = orangeFill
+                ws1[ascii_headers[28 + offset_from_final_sds_header] + "1"].font = Font(bold=True, size=12, name="Calibri")
 
 
 
             # add the field value to the corresponding cell in the excel file
             offset_from_final_sds_header = custom_headers_to_column[field_name]
 
-            ws1[ascii_headers[27 + offset_from_final_sds_header] + str(row)] = field
-            ws1[ascii_headers[27 + offset_from_final_sds_header] + str(row)].font = Font(bold=False, size=11, name="Arial")
+            ws1[ascii_headers[28 + offset_from_final_sds_header] + str(row)] = field
+            ws1[ascii_headers[28 + offset_from_final_sds_header] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
 
         row += 1
