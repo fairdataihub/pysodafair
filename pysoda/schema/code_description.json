@@ -20,6 +20,9 @@
           },
           {
             "pattern": "^RRID:([A-Z]+):([A-Za-z0-9_:-]+)$"
+          },
+          {
+            "pattern": "^RRID:[A-Za-z]+\\S*[_:]\\S*$"
           }
         ]
       }

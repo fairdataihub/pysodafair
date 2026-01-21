@@ -61,35 +61,38 @@ def create_excel(soda, upload_boolean, local_destination):
         ws1[ascii_headers[9] + str(row)] = sample.get("metadata_only", "")
         ws1[ascii_headers[9] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
-        ws1[ascii_headers[10] + str(row)] = sample.get("laboratory_internal_id", "")
+        ws1[ascii_headers[10] + str(row)] = sample.get("number_of_directly_derived_samples", "")
         ws1[ascii_headers[10] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
-        ws1[ascii_headers[11] + str(row)] = sample.get("date_of_derivation", "")
+        ws1[ascii_headers[11] + str(row)] = sample.get("laboratory_internal_id", "")
         ws1[ascii_headers[11] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
-        ws1[ascii_headers[12] + str(row)] = sample.get("experimental_log_file_path", "")
+        ws1[ascii_headers[12] + str(row)] = sample.get("date_of_derivation", "")
         ws1[ascii_headers[12] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
-        ws1[ascii_headers[13] + str(row)] = sample.get("reference_atlas", "")
+        ws1[ascii_headers[13] + str(row)] = sample.get("experimental_log_file_path", "")
         ws1[ascii_headers[13] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
-        ws1[ascii_headers[14] + str(row)] = sample.get("pathology", "")
+        ws1[ascii_headers[14] + str(row)] = sample.get("reference_atlas", "")
         ws1[ascii_headers[14] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
-        ws1[ascii_headers[15] + str(row)] = sample.get("laterality", "")
+        ws1[ascii_headers[15] + str(row)] = sample.get("pathology", "")
         ws1[ascii_headers[15] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
-        ws1[ascii_headers[16] + str(row)] = sample.get("cell_type", "")
+        ws1[ascii_headers[16] + str(row)] = sample.get("laterality", "")
         ws1[ascii_headers[16] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
-        ws1[ascii_headers[17] + str(row)] = sample.get("plane_of_section", "")
+        ws1[ascii_headers[17] + str(row)] = sample.get("cell_type", "")
         ws1[ascii_headers[17] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
-        ws1[ascii_headers[18] + str(row)] = sample.get("protocol_title", "")
+        ws1[ascii_headers[18] + str(row)] = sample.get("plane_of_section", "")
         ws1[ascii_headers[18] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
-        ws1[ascii_headers[19] + str(row)] = sample.get("protocol_url_or_doi", "")
+        ws1[ascii_headers[19] + str(row)] = sample.get("protocol_title", "")
         ws1[ascii_headers[19] + str(row)].font = Font(bold=False, size=11, name="Arial")
+
+        ws1[ascii_headers[20] + str(row)] = sample.get("protocol_url_or_doi", "")
+        ws1[ascii_headers[20] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
         # Handle custom fields
         for field_name, field in sample.items():
@@ -102,14 +105,14 @@ def create_excel(soda, upload_boolean, local_destination):
 
                 # Create the column header in the Excel file
                 offset_from_final_sds_header = custom_headers_to_column[field_name]
-                ws1[ascii_headers[19 + offset_from_final_sds_header] + "1"] = field_name
-                ws1[ascii_headers[19 + offset_from_final_sds_header] + "1"].fill = orangeFill
-                ws1[ascii_headers[19 + offset_from_final_sds_header] + "1"].font = Font(bold=True, size=12, name="Calibri")
+                ws1[ascii_headers[20 + offset_from_final_sds_header] + "1"] = field_name
+                ws1[ascii_headers[20 + offset_from_final_sds_header] + "1"].fill = orangeFill
+                ws1[ascii_headers[20 + offset_from_final_sds_header] + "1"].font = Font(bold=True, size=12, name="Calibri")
 
             # Add the field value to the corresponding cell in the Excel file
             offset_from_final_sds_header = custom_headers_to_column[field_name]
-            ws1[ascii_headers[19 + offset_from_final_sds_header] + str(row)] = field
-            ws1[ascii_headers[19 + offset_from_final_sds_header] + str(row)].font = Font(bold=False, size=11, name="Arial")
+            ws1[ascii_headers[20 + offset_from_final_sds_header] + str(row)] = field
+            ws1[ascii_headers[20 + offset_from_final_sds_header] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
         row += 1
 

@@ -98,14 +98,19 @@
           "type": "string",
           "description": "URL or DOI of the protocol used for the subject.",
           "anyOf": [
-            { "pattern": "^(https?)://([^s/]+)/([^s]*)$" },
+            { "pattern": "^$" },
             {
-              "pattern": "^https://doi.org/10\\.[0-9]{4,9}[-._;()/:a-zA-Z0-9]+$"
+              "pattern": "^https://[A-Za-z0-9.-]+[A-Za-z0-9](:[0-9]+)?(/.*)?$"
             },
+            { "pattern": "^10\\.\\d{4,9}/[-._;()/:A-Za-z0-9]+$" },
             {
-              "pattern": "^https://www.protocols.io/(view|edit|private|api/v[34]/protocols)/.*$"
+              "pattern": "^https://doi\\.org/10\\.\\d{4,9}/[-._;()/:A-Za-z0-9]+$"
             }
           ]
+        },
+        "number_of_directly_derived_samples": {
+          "type": "string",
+          "description": "Number of samples directly derived from this sample."
         }
       },
       "required": ["sample_id", "subject_id"],

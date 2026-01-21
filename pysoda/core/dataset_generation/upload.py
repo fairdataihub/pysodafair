@@ -3033,6 +3033,7 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
         end = timer()
         logger.info(f"Time for ps_upload_to_dataset function: {timedelta(seconds=end - start)}")
     except Exception as e:
+        logger.error(f"An error occurred in ps_upload_to_dataset function: {str(e)}")
         # reset the total bytes uploaded for any file that has not been fully uploaded
         ums.set_main_total_generate_dataset_size(main_total_generate_dataset_size)
         ums.set_total_files_to_upload(total_files)
@@ -3625,6 +3626,7 @@ def main_curate_function(soda, resume):
             ps = connect_pennsieve_client(accountname)
             generate_dataset(soda, resume, ps)
     except Exception as e:
+        logger.error(f"An error occurred in main_curate_function function: {str(e)}")
         main_curate_status = "Done"
         raise e
 
