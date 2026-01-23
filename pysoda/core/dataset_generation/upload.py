@@ -3058,6 +3058,7 @@ renaming_files_flow = False
 elapsed_time = None
 manifest_id = None 
 origin_manifest_id = None
+curation_error_message = ""
 
 
 
@@ -3559,6 +3560,7 @@ def reset_upload_session_environment(resume):
     global generated_dataset_id
     global bytes_file_path_dict
     global renaming_files_flow
+    global curation_error_message
 
     start_generate = 0
     myds = ""
@@ -3573,6 +3575,7 @@ def reset_upload_session_environment(resume):
     main_curation_uploaded_files = 0
     uploaded_folder_counter = 0
     generated_dataset_id = None
+    curation_error_message = ""
 
     main_curate_status = "Curating"
     main_curate_progress_message = "Starting dataset curation"
@@ -3601,6 +3604,7 @@ def main_curate_function(soda, resume):
     global manifest_id 
     global origin_manifest_id
     global total_files
+    global curation_error_message
 
     logger.info("Starting generating selected dataset")
     logger.info(f"Generating dataset metadata generate-options={soda['generate-dataset']}")
@@ -3628,6 +3632,7 @@ def main_curate_function(soda, resume):
     except Exception as e:
         logger.error(f"An error occurred in main_curate_function function: {str(e)}")
         main_curate_status = "Done"
+        curation_error_message = str(e)
         raise e
 
     main_curate_status = "Done"
@@ -3665,6 +3670,7 @@ def main_curate_function_progress():
     global renaming_files_flow
     global ums 
     global elapsed_time
+    global curation_error_message
 
 
     prior_elapsed_time = ums.get_elapsed_time()
@@ -3691,6 +3697,7 @@ def main_curate_function_progress():
         "total_files_uploaded": main_curation_uploaded_files,
         "generated_dataset_id": myds["content"]["id"] if myds != "" else None, # when a new dataset gets generated log its id to our analytics
         "generated_dataset_int_id": myds["content"]["intId"] if myds != "" else None,
+        "curation_error_message": curation_error_message,
     }
 
 
