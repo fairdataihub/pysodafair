@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pysodafair"
-version = "0.1.68"
+version = "0.1.69"
 description = "Pysoda package for Fairdataihub tools"
 authors = ["Christopher Marroquin <cmarroquin@calmi2.org>"]
 license = "MIT"
@@ -17,10 +17,10 @@ include = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.6"
+python = ">=3.9"
 openpyxl = "*"
 
 
 [build-system]
-requires = ["poetry-core"]
+requires = ["poetry-core", "poetry==2.2.1"]
 build-backend = "poetry.core.masonry.api"
