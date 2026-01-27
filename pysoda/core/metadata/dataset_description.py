@@ -146,7 +146,9 @@ def populate_contributor_info(workbook, soda):
         workbook[column + "28"] = contributor.get("contributor_name", "")
         workbook[column + "29"] = contributor.get("contributor_orcid_id", "")
         workbook[column + "30"] = contributor.get("contributor_affiliation", "")
-        workbook[column + "31"] = contributor.get("contributor_role", "")
+        roles = contributor.get("contributor_roles", [])
+        roles_str = ", ".join(roles) if roles else ""
+        workbook[column + "31"] = roles_str
     # Return the length of the contributor array, or 1 if empty
     return max(1, len(contributor_info))
 
