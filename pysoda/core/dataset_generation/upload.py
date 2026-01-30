@@ -2149,8 +2149,6 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                     my_bf_existing_files_name_with_extension,
                 ) = ps_get_existing_files_details(my_tracking_folder)
 
-                logger.info(f"Existing files in Pennsieve: {my_bf_existing_files_name_with_extension}")
-
                 list_local_files = []
                 list_projected_names = []
                 list_desired_names = []
