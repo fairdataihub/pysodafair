@@ -2465,7 +2465,7 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                     relative_path,
                 )
 
-                logger.info(f"List of files to upload: {list_upload_files}")
+                logger.info(f"Amount of files to upload: {len(list_upload_files)} ")
 
 
                 # return and mark upload as completed if nothing is added to the manifest
