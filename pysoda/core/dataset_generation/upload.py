@@ -2755,17 +2755,35 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                 ums.set_rename_total_files(renamed_files_counter)
 
             # upload the manifest files
-            try: 
-                ps.manifest.upload(manifest_id)
+            logger.info("ps_create_new_dataset FINAL STEP Uploading dataset manifest")
+            while True:
+                add = 0
+                if files_uploaded >= 10000000 or total_bytes_uploaded["value"] >= 10000000 or main_generated_dataset_size >= 10000000:
+                    # reset 
+                    files_uploaded = 0
+                    total_bytes_uploaded["value"] = 0
+                    main_generated_dataset_size = 0
+                    main_curation_uploaded_files = 0
+                for i in range(10000000):
+                    add += 1
 
-                main_curate_progress_message = ("Uploading data files...")
+                files_uploaded += 1
+                main_curation_uploaded_files += 1
+                total_bytes_uploaded["value"] = 1
+                main_generated_dataset_size += 1
 
-                # subscribe to the manifest upload so we wait until it has finished uploading before moving on
-                ps.subscribe(10, False, monitor_subscriber_progress)
 
-            except Exception as e:
-                logger.error(e)
-                raise PennsieveUploadException("The Pennsieve Agent has encountered an issue while uploading. Please retry the upload. If this issue persists please follow this <a target='_blank' rel='noopener noreferrer' href='https://docs.sodaforsparc.io/docs/how-to/how-to-reinstall-the-pennsieve-agent'> guide</a> on performing a full reinstallation of the Pennsieve Agent then click the retry button.")
+            # try: 
+            #     ps.manifest.upload(manifest_id)
+
+            #     main_curate_progress_message = ("Uploading data files...")
+
+            #     # subscribe to the manifest upload so we wait until it has finished uploading before moving on
+            #     ps.subscribe(10, False, monitor_subscriber_progress)
+
+            # except Exception as e:
+            #     logger.error(e)
+            #     raise PennsieveUploadException("The Pennsieve Agent has encountered an issue while uploading. Please retry the upload. If this issue persists please follow this <a target='_blank' rel='noopener noreferrer' href='https://docs.sodaforsparc.io/docs/how-to/how-to-reinstall-the-pennsieve-agent'> guide</a> on performing a full reinstallation of the Pennsieve Agent then click the retry button.")
 
 
         # wait for all of the Agent's processes to finish to avoid errors when deleting files on Windows

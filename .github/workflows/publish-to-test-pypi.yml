@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - staging
+      - server-crash-testing
   workflow_dispatch:
 
 jobs:
