@@ -30,6 +30,9 @@ jobs:
 
       - name: Setup Poetry
         uses: Gr1N/setup-poetry@v8
+        with:
+          poetry-version: "2.2.1"
+      - run: poetry --version
 
       - name: Install dependencies
         run: poetry install
