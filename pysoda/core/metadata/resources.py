@@ -1,6 +1,6 @@
 from .constants import METADATA_UPLOAD_PS_PATH, TEMPLATE_PATH, SDS_FILE_RESOURCES, SCHEMA_NAME_RESOURCES
 from .excel_utils import rename_headers, excel_columns
-from openpyxl.styles import PatternFill
+from openpyxl.styles import PatternFill, Font
 from os.path import join, getsize
 from openpyxl import load_workbook
 import shutil
@@ -27,13 +27,28 @@ def create_excel(soda, upload_boolean, local_destination):
     ascii_headers = excel_columns(start_index=0)
     for resource in resources: 
         ws1[ascii_headers[0] + str(row)] = resource.get("rrid", "")
+        ws1[ascii_headers[0] + str(row)].font = Font(bold=False, size=11, name="Arial")
+        
         ws1[ascii_headers[1] + str(row)] = resource.get("type", "")
+        ws1[ascii_headers[1] + str(row)].font = Font(bold=False, size=11, name="Arial")
+        
         ws1[ascii_headers[2] + str(row)] = resource.get("name", "")
+        ws1[ascii_headers[2] + str(row)].font = Font(bold=False, size=11, name="Arial")
+        
         ws1[ascii_headers[3] + str(row)] = resource.get("url", "")
+        ws1[ascii_headers[3] + str(row)].font = Font(bold=False, size=11, name="Arial")
+        
         ws1[ascii_headers[4] + str(row)] = resource.get("vendor", "")
+        ws1[ascii_headers[4] + str(row)].font = Font(bold=False, size=11, name="Arial")
+        
         ws1[ascii_headers[5] + str(row)] = resource.get("version", "")
+        ws1[ascii_headers[5] + str(row)].font = Font(bold=False, size=11, name="Arial")
+        
         ws1[ascii_headers[6] + str(row)] = resource.get("id_in_protocol", "")
+        ws1[ascii_headers[6] + str(row)].font = Font(bold=False, size=11, name="Arial")
+        
         ws1[ascii_headers[7] + str(row)] = resource.get("additional_metadata", "")
+        ws1[ascii_headers[7] + str(row)].font = Font(bold=False, size=11, name="Arial")
 
         row += 1
 

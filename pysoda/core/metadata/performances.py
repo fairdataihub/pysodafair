@@ -1,6 +1,6 @@
 from .constants import METADATA_UPLOAD_PS_PATH, TEMPLATE_PATH, SDS_FILE_PERFORMANCES, SCHEMA_NAME_PERFORMANCES
 from .excel_utils import rename_headers, excel_columns
-from openpyxl.styles import PatternFill
+from openpyxl.styles import PatternFill, Font
 from os.path import join, getsize
 from openpyxl import load_workbook
 import shutil
@@ -26,13 +26,26 @@ def create_excel(soda, upload_boolean, local_destination):
     ascii_headers = excel_columns(start_index=0)
     for performance in performances: 
         ws1[ascii_headers[0] + str(row)] = performance.get("performance_id", "")
+        ws1[ascii_headers[0] + str(row)].font = Font(bold=False, size=11, name="Arial")
+        
         ws1[ascii_headers[1] + str(row)] = performance.get("protocol_url_or_doi", "")
+        ws1[ascii_headers[1] + str(row)].font = Font(bold=False, size=11, name="Arial")
+        
         ws1[ascii_headers[2] + str(row)] = performance.get("date", "")
+        ws1[ascii_headers[2] + str(row)].font = Font(bold=False, size=11, name="Arial")
+        
         ws1[ascii_headers[3] + str(row)] = performance.get("start_datetime", "")
+        ws1[ascii_headers[3] + str(row)].font = Font(bold=False, size=11, name="Arial")
+        
         ws1[ascii_headers[4] + str(row)] = performance.get("end_datetime", "")
+        ws1[ascii_headers[4] + str(row)].font = Font(bold=False, size=11, name="Arial")
+        
         participants = " ".join(performance.get("participants", []))
         ws1[ascii_headers[5] + str(row)] = participants
+        ws1[ascii_headers[5] + str(row)].font = Font(bold=False, size=11, name="Arial")
+        
         ws1[ascii_headers[6] + str(row)] = performance.get("additional_metadata", "")
+        ws1[ascii_headers[6] + str(row)].font = Font(bold=False, size=11, name="Arial")
         row += 1
 
     wb.save(destination)
