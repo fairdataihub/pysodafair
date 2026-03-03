@@ -3835,17 +3835,11 @@ def generate_manifest_file_locally(generate_purpose, soda):
 
 
 def generate_manifest_file_data(dataset_structure):
-    double_extensions = {
-        ".ome.tiff", ".ome.tif", ".ome.tf2", ".ome.tf8", ".ome.btf", ".ome.xml",
-        ".brukertiff.gz", ".mefd.gz", ".moberg.gz", ".nii.gz", ".mgh.gz", ".tar.gz", ".bcl.gz"
-    }
-
     # Helper: Determine file extension (handles double extensions)
     def get_file_extension(filename):
-        for ext in double_extensions:
+        for ext in ps_recognized_file_extensions:
             if filename.endswith(ext):
-                base_ext = os.path.splitext(os.path.splitext(filename)[0])[1]
-                return base_ext + ext
+                return ext
         return os.path.splitext(filename)[1]
 
     # Helper: Create a manifest row for a folder
