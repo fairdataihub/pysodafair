@@ -3835,11 +3835,18 @@ def generate_manifest_file_locally(generate_purpose, soda):
 
 
 def generate_manifest_file_data(dataset_structure):
-    # Helper: Determine file extension (handles double extensions)
+    # Helper: Determine file extension (handles double extensions).
+    # ``ps_recognized_file_extensions`` may contain extensions where one is a
+    # suffix of another (for example ".tar" and ".tar.gz").  If we iterate
+    # naively we can return the shorter extension and strip the wrong suffix.
+    # To avoid this we sort the list by length (longest first) and perform a
+    # case-insensitive comparison.
     def get_file_extension(filename):
-        for ext in ps_recognized_file_extensions:
-            if filename.endswith(ext):
+        lower_name = filename.lower()
+        for ext in sorted(ps_recognized_file_extensions, key=len, reverse=True):
+            if lower_name.endswith(ext.lower()):
                 return ext
+        # fallback to the standard splitext if nothing matches
         return os.path.splitext(filename)[1]
 
     # Helper: Create a manifest row for a folder
