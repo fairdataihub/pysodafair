@@ -323,162 +323,6 @@ def path_size(path):
     return folder_size(path) if isdir(path) else getsize(path)
 
 
-def create_folder_level_manifest(jsonpath, jsondescription):
-    """
-    Function to create manifest files for each SPARC folder.
-    Files are created in a temporary folder
-
-    Args:
-        datasetpath: path of the dataset (string)
-        jsonpath: all paths in json format with key being SPARC folder names (dictionary)
-        jsondescription: description associated with each path (dictionary)
-    Action:
-        Creates manifest files in xslx format for each SPARC folder
-    """
-    global total_dataset_size
-    local_timezone = TZLOCAL()
-
-    try:
-        shutil.rmtree(metadatapath) if isdir(metadatapath) else 0
-        makedirs(metadatapath)
-        folders = list(jsonpath.keys())
-
-        if "main" in folders:
-            folders.remove("main")
-        # In each SPARC folder, generate a manifest file
-        for folder in folders:
-            if jsonpath[folder] != []:
-                # Initialize dataframe where manifest info will be stored
-                df = pd.DataFrame(
-                    columns=[
-                        "filename",
-                        "timestamp",
-                        "description",
-                        "file type",
-                        "Additional Metadata",
-                    ]
-                )
-                # Get list of files/folders in the the folder
-                # Remove manifest file from the list if already exists
-                folderpath = join(metadatapath, folder)
-                allfiles = jsonpath[folder]
-                alldescription = jsondescription[folder + "_description"]
-
-                countpath = -1
-                for pathname in allfiles:
-                    countpath += 1
-                    if basename(pathname) in ["manifest.csv", "manifest.xlsx"]:
-                        allfiles.pop(countpath)
-                        alldescription.pop(countpath)
-
-                # Populate manifest dataframe
-                filename, timestamp, filetype, filedescription = [], [], [], []
-                countpath = -1
-                for paths in allfiles:
-                    if isdir(paths):
-                        key = basename(paths)
-                        alldescription.pop(0)
-                        for subdir, dirs, files in os.walk(paths):
-                            for file in files:
-                                gevent.sleep(0)
-                                filepath = pathlib.Path(paths) / subdir / file
-                                mtime = filepath.stat().st_mtime
-                                lastmodtime = datetime.fromtimestamp(mtime).astimezone(
-                                    local_timezone
-                                )
-                                timestamp.append(
-                                    lastmodtime.isoformat()
-                                    .replace(".", ",")
-                                    .replace("+00:00", "Z")
-                                )
-                                full_filename = filepath.name
-
-                                if folder == "main":  # if file in main folder
-                                    filename.append(
-                                        full_filename
-                                    ) if folder == "" else filename.append(
-                                        join(folder, full_filename)
-                                    )
-                                else:
-                                    subdirname = os.path.relpath(
-                                        subdir, paths
-                                    )  # gives relative path of the directory of the file w.r.t paths
-                                    if subdirname == ".":
-                                        filename.append(join(key, full_filename))
-                                    else:
-                                        filename.append(
-                                            join(key, subdirname, full_filename)
-                                        )
-
-                                fileextension = splitext(full_filename)[1]
-                                if (
-                                    not fileextension
-                                ):  # if empty (happens e.g. with Readme files)
-                                    fileextension = "None"
-                                filetype.append(fileextension)
-                                filedescription.append("")
-                    else:
-                        gevent.sleep(0)
-                        countpath += 1
-                        filepath = pathlib.Path(paths)
-                        file = filepath.name
-                        filename.append(file)
-                        mtime = filepath.stat().st_mtime
-                        lastmodtime = datetime.fromtimestamp(mtime).astimezone(
-                            local_timezone
-                        )
-                        timestamp.append(
-                            lastmodtime.isoformat()
-                            .replace(".", ",")
-                            .replace("+00:00", "Z")
-                        )
-                        filedescription.append(alldescription[countpath])
-                        if isdir(paths):
-                            filetype.append("folder")
-                        else:
-                            fileextension = splitext(file)[1]
-                            if (
-                                not fileextension
-                            ):  # if empty (happens e.g. with Readme files)
-                                fileextension = "None"
-                            filetype.append(fileextension)
-
-                df["filename"] = filename
-                df["timestamp"] = timestamp
-                df["file type"] = filetype
-                df["description"] = filedescription
-
-                makedirs(folderpath)
-                # Save manifest as Excel sheet
-                manifestfile = join(folderpath, "manifest.xlsx")
-                df.to_excel(manifestfile, index=None, header=True)
-                wb = load_workbook(manifestfile)
-                ws = wb.active
-
-                blueFill = PatternFill(
-                    start_color="9DC3E6", fill_type="solid"
-                )
-                greenFill = PatternFill(
-                    start_color="A8D08D", fill_type="solid"
-                )
-                yellowFill = PatternFill(
-                    start_color="FFD965", fill_type="solid"
-                )
-                ws['A1'].fill = blueFill
-                ws['B1'].fill = greenFill
-                ws['C1'].fill = greenFill
-                ws['D1'].fill = greenFill
-                ws['E1'].fill = yellowFill
-
-                wb.save(manifestfile)
-                total_dataset_size += path_size(manifestfile)
-                jsonpath[folder].append(manifestfile)
-
-        return jsonpath
-
-    except Exception as e:
-        raise e
-
 
 def return_new_path(topath):
     """
@@ -1602,17 +1446,6 @@ def ps_update_existing_dataset(soda, ds, ps, resume):
         for item in list(folder["folders"]):
             recursive_file_delete(folder["folders"][item])
 
-    # Delete any files on Pennsieve that have been marked as deleted
-    def metadata_file_delete(soda):
-        if "dataset_metadata" in soda.keys():
-            folder = soda["dataset_metadata"]
-            for item in list(folder):
-                if "deleted" in folder[item]["action"]:
-                    r = requests.post(f"{PENNSIEVE_URL}/data/delete", headers=create_request_headers(ps), json={"things": [folder[item]["path"]]})
-                    r.raise_for_status()
-                    del folder[item]
-
-
     def recursive_item_path_create(folder, path):
         """
         Recursively create the path for the item    # Add a new key containing the path to all the files and folders on the
@@ -1678,26 +1511,6 @@ def ps_update_existing_dataset(soda, ds, ps, resume):
         else:
             return current_folder_structure["folders"][folder]["path"]
 
-    # Check for any files that have been moved and verify paths before moving
-    def recursive_check_moved_files(folder):
-        if "files" in folder.keys():
-            for item in list(folder["files"]):
-                if (
-                    "moved" in folder["files"][item]["action"]
-                    and folder["files"][item]["location"] == "ps"
-                ):
-                    # create the folders if they do not exist
-                    new_folder_id = ""
-                    new_folder_id = recursive_check_and_create_ps_file_path(
-                        folder["files"][item]["folderpath"].copy(), 0, dataset_structure
-                    )
-                    # move the file into the target folder on Pennsieve
-                    r = requests.post(f"{PENNSIEVE_URL}/data/move",  json={"things": [folder["files"][item]["path"]], "destination": new_folder_id}, headers=create_request_headers(ps))
-                    r.raise_for_status()
-
-        for item in list(folder["folders"]):
-            recursive_check_moved_files(folder["folders"][item])
-
 
     # Rename any files that exist on Pennsieve
     def recursive_file_rename(folder):
@@ -1722,36 +1535,38 @@ def ps_update_existing_dataset(soda, ds, ps, resume):
         files and folders that exist inside.
         """
         for item in list(folder["folders"]):
-            if folder["folders"][item]["location"] == "ps":
-                if "moved" in folder["folders"][item]["action"]:
-                    file_path = folder["folders"][item]["path"]
+            child = folder["folders"][item]
+            if child.get("location") == "ps":
+                if "moved" in child.get("action", []):
+                    file_path = child["path"]
                     # remove the file from the dataset
                     r = requests.post(f"{PENNSIEVE_URL}/data/delete", headers=create_request_headers(ps), json={"things": [file_path]})
                     r.raise_for_status()
-                if "deleted" in folder["folders"][item]["action"]:
-                    file_path = folder["folders"][item]["path"]
+                if "deleted" in child.get("action", []):
+                    file_path = child["path"]
                     # remove the file from the dataset
                     r = requests.post(f"{PENNSIEVE_URL}/data/delete", headers=create_request_headers(ps), json={"things": [file_path]})
                     r.raise_for_status()
                     del folder["folders"][item]
                 else:
-                    recursive_folder_delete(folder["folders"][item])
+                    recursive_folder_delete(child)
             else:
-                recursive_folder_delete(folder["folders"][item])
+                recursive_folder_delete(child)
 
 
     # Rename any folders that still exist.
     def recursive_folder_rename(folder, mode):
         for item in list(folder["folders"]):
+            child = folder["folders"][item]
             if (
-                folder["folders"][item]["location"] == "ps"
-                and "action" in folder["folders"][item].keys()
-                and mode in folder["folders"][item]["action"]
+                child.get("location") == "ps"
+                and "action" in child
+                and mode in child["action"]
             ):
-                folder_id = folder["folders"][item]["path"]
+                folder_id = child["path"]
                 r = requests.put(f"{PENNSIEVE_URL}/packages/{folder_id}?updateStorage=true", headers=create_request_headers(ps), json={"name": item})
                 r.raise_for_status()
-            recursive_folder_rename(folder["folders"][item], mode)
+            recursive_folder_rename(child, mode)
 
 
     ps_dataset = ""
@@ -1791,35 +1606,8 @@ def ps_update_existing_dataset(soda, ds, ps, resume):
     recursive_item_path_create(ps_dataset, [])
     main_curate_progress_message = "File paths created"
 
-    # 4. Move any files that are marked as moved on Pennsieve.
-    # Create any additional folders if required
-    logger.info("ps_update_existing_dataset step 4 move any files that are marked as moved on Pennsieve")
-    main_curate_progress_message = "Moving any files requested by the user"
-    recursive_check_moved_files(dataset_structure)
-    main_curate_progress_message = "Moved all files requested by the user"
-
-    # 5. Rename any Pennsieve files that are marked as renamed.
-    logger.info("ps_update_existing_dataset step 5 rename any Pennsieve files that are marked as renamed")
-    main_curate_progress_message = "Renaming any files requested by the user"
-    recursive_file_rename(dataset_structure)
-    main_curate_progress_message = "Renamed all files requested by the user"
-
-    # 6. Delete any Pennsieve folders that are marked as deleted.
-    logger.info("ps_update_existing_dataset step 6 delete any Pennsieve folders that are marked as deleted")
-    main_curate_progress_message = (
-        "Deleting any additional folders present on Pennsieve"
-    )
-    recursive_folder_delete(dataset_structure)
-    main_curate_progress_message = "Deletion of additional folders complete"
-
-    # 7. Delete any metadata files that are marked as deleted.
-    logger.info("ps_update_existing_dataset step 8 delete any metadata files that are marked as deleted")
-    main_curate_progress_message = "Removing any metadata files marked for deletion"
-    metadata_file_delete(soda)
-    main_curate_progress_message = "Removed metadata files marked for deletion"
-
-    # 8. Run the original code to upload any new files added to the dataset.
-    logger.info("ps_update_existing_dataset step 9 run the ps_create_new_dataset code to upload any new files added to the dataset")
+    # 4. Run the original code to upload any new files added to the dataset.
+    logger.info("ps_update_existing_dataset step 4 run the ps_create_new_dataset code to upload any new files added to the dataset")
     if "dataset_metadata" in soda.keys() and "manifest_files" in soda["dataset_metadata"].keys():
         if "auto-generated" in soda["manifest-files"].keys():
             soda["manifest-files"] = {"destination": "ps", "auto-generated": True}
@@ -1906,6 +1694,89 @@ bytes_file_path_dict = {}
 # retry variables instantiated outside function
 list_of_files_to_rename = {}
 renamed_files_counter = 0 
+
+
+def create_metadata_files_for_upload(soda, list_upload_metadata_files, existing_root_files=None, existing_file_option="skip"):
+    """
+    Creates metadata files (Excel and text) based on soda["dataset_metadata"] and appends them to the upload list.
+    
+    Args:
+        soda: The soda JSON object
+        list_upload_metadata_files: List to append created metadata file paths to
+        existing_root_files: Dict of existing files at root level on Pennsieve (filename -> file info)
+        existing_file_option: How to handle existing files - "skip", "replace", or "duplicate"
+    """
+    global main_total_generate_dataset_size
+    global total_files
+    global total_metadata_files
+
+    # Map metadata keys to their file creation functions and filenames
+    excel_metadata = {
+        "submission": (submission.create_excel, "submission.xlsx"),
+        "subjects": (subjects.create_excel, "subjects.xlsx"),
+        "samples": (samples.create_excel, "samples.xlsx"),
+        "performances": (performances.create_excel, "performances.xlsx"),
+        "resources": (resources.create_excel, "resources.xlsx"),
+        "sites": (sites.create_excel, "sites.xlsx"),
+        "dataset_description": (dataset_description.create_excel, "dataset_description.xlsx"),
+        "code_description": (code_description.create_excel, "code_description.xlsx"),
+        "manifest_file": (manifest.create_excel, "manifest.xlsx"),
+    }
+
+    text_metadata_files = {
+        "README.md": "README.md",
+        "CHANGES": "CHANGES",
+        "LICENSE": "LICENSE",
+    }
+
+    if "dataset_metadata" not in soda:
+        return
+
+    existing_root_files = existing_root_files or {}
+
+    for key in soda["dataset_metadata"].keys():
+        if key in excel_metadata:
+            create_func, filename = excel_metadata[key]
+            
+            # Check if file already exists on Pennsieve
+            if filename in existing_root_files:
+                if existing_file_option == "skip":
+                    logger.info(f"Skipping metadata file {filename} - already exists on Pennsieve")
+                    continue
+                elif existing_file_option == "replace":
+                    # Delete existing file on Pennsieve
+                    file_id = existing_root_files[filename]["content"]["id"]
+                    logger.info(f"Replacing metadata file {filename} on Pennsieve")
+                    r = requests.post(f"{PENNSIEVE_URL}/data/delete", json={"things": [file_id]}, headers=create_request_headers(get_access_token()))
+                    r.raise_for_status()
+            
+            metadata_path = os.path.join(METADATA_UPLOAD_PS_PATH, filename)
+            create_func(soda, False, metadata_path)
+            list_upload_metadata_files.append(metadata_path)
+            main_total_generate_dataset_size += getsize(metadata_path)
+            total_files += 1
+            total_metadata_files += 1
+        elif key in text_metadata_files:
+            filename = text_metadata_files[key]
+            
+            # Check if file already exists on Pennsieve
+            if filename in existing_root_files:
+                if existing_file_option == "skip":
+                    logger.info(f"Skipping metadata file {filename} - already exists on Pennsieve")
+                    continue
+                elif existing_file_option == "replace":
+                    # Delete existing file on Pennsieve
+                    file_id = existing_root_files[filename]["content"]["id"]
+                    logger.info(f"Replacing metadata file {filename} on Pennsieve")
+                    r = requests.post(f"{PENNSIEVE_URL}/data/delete", json={"things": [file_id]}, headers=create_request_headers(get_access_token()))
+                    r.raise_for_status()
+            
+            metadata_path = os.path.join(METADATA_UPLOAD_PS_PATH, filename)
+            text_metadata.create_text_file(soda, False, metadata_path, filename)
+            list_upload_metadata_files.append(metadata_path)
+            main_total_generate_dataset_size += getsize(metadata_path)
+            total_files += 1
+            total_metadata_files += 1
 
 
 def ps_upload_to_dataset(soda, ps, ds, resume=False):
@@ -2347,102 +2218,11 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                 brand_new_dataset = True
                 list_upload_files = recursive_dataset_scan_for_new_upload(dataset_structure, list_upload_files, relative_path)
 
-
-
-
-
-            if "dataset_metadata" in soda.keys():
-                for key, _ in soda["dataset_metadata"].items():
-                    if key == "submission":
-                        metadata_path = os.path.join(METADATA_UPLOAD_PS_PATH, "submission.xlsx")
-                        submission.create_excel(soda, False, metadata_path)
-                        list_upload_metadata_files.append(metadata_path)
-                        main_total_generate_dataset_size += getsize(metadata_path)
-                        total_files += 1
-                        total_metadata_files += 1
-                    if key == "subjects":
-                        metadata_path = os.path.join(METADATA_UPLOAD_PS_PATH, "subjects.xlsx")
-                        subjects.create_excel(soda, False, metadata_path)
-                        list_upload_metadata_files.append(metadata_path)
-                        main_total_generate_dataset_size += getsize(metadata_path)
-                        total_files += 1
-                        total_metadata_files += 1
-                    if key == "samples":
-                        metadata_path = os.path.join(METADATA_UPLOAD_PS_PATH, "samples.xlsx")
-                        samples.create_excel(soda, False, metadata_path)
-                        list_upload_metadata_files.append(metadata_path)
-                        main_total_generate_dataset_size += getsize(metadata_path)
-                        total_files += 1
-                        total_metadata_files += 1
-                    if key == "performances":
-                        metadata_path = os.path.join(METADATA_UPLOAD_PS_PATH, "performances.xlsx")
-                        performances.create_excel(soda, False, metadata_path)
-                        list_upload_metadata_files.append(metadata_path)
-                        main_total_generate_dataset_size += getsize(metadata_path)
-                        total_files += 1
-                        total_metadata_files += 1
-                    if key == "resources":
-                        metadata_path = os.path.join(METADATA_UPLOAD_PS_PATH, "resources.xlsx")
-                        resources.create_excel(soda, False, metadata_path)
-                        list_upload_metadata_files.append(metadata_path)
-                        main_total_generate_dataset_size += getsize(metadata_path)
-                        total_files += 1
-                        total_metadata_files += 1
-                    if key == "sites":
-                        metadata_path = os.path.join(METADATA_UPLOAD_PS_PATH, "sites.xlsx")
-                        sites.create_excel(soda, False, metadata_path)
-                        list_upload_metadata_files.append(metadata_path)
-                        main_total_generate_dataset_size += getsize(metadata_path)
-                        total_files += 1
-                        total_metadata_files += 1
-                    if key == "dataset_description":
-                        metadata_path = os.path.join(METADATA_UPLOAD_PS_PATH, "dataset_description.xlsx")
-                        dataset_description.create_excel(soda, False, metadata_path)
-                        list_upload_metadata_files.append(metadata_path)
-                        main_total_generate_dataset_size += getsize(metadata_path)
-                        total_files += 1
-                        total_metadata_files += 1
-                    if key == "code_description":
-                        metadata_path = os.path.join(METADATA_UPLOAD_PS_PATH, "code_description.xlsx")
-                        code_description.create_excel(soda, False, metadata_path)
-                        list_upload_metadata_files.append(metadata_path)
-                        main_total_generate_dataset_size += getsize(metadata_path)
-                        total_files += 1
-                        total_metadata_files += 1
-                    if key == "manifest_file":
-                        metadata_path = os.path.join(METADATA_UPLOAD_PS_PATH, "manifest.xlsx")
-                        manifest.create_excel(soda, False, metadata_path)
-                        list_upload_metadata_files.append(metadata_path)
-                        main_total_generate_dataset_size += getsize(metadata_path)
-                        total_files += 1
-                        total_metadata_files += 1
-
-                    if key == "README.md":
-                        metadata_path = os.path.join(METADATA_UPLOAD_PS_PATH, "README.md")
-                        text_metadata.create_text_file(soda, False, metadata_path, "README.md")
-                        list_upload_metadata_files.append(metadata_path)
-                        main_total_generate_dataset_size += getsize(metadata_path)
-                        total_files += 1
-                        total_metadata_files += 1
-                    if key == "CHANGES":
-                        metadata_path = os.path.join(METADATA_UPLOAD_PS_PATH, "CHANGES")
-                        text_metadata.create_text_file(soda, False, metadata_path, "CHANGES")
-                        list_upload_metadata_files.append(metadata_path)
-                        main_total_generate_dataset_size += getsize(metadata_path)
-                        total_files += 1
-                        total_metadata_files += 1
-                    if key == "LICENSE":
-                        metadata_path = os.path.join(METADATA_UPLOAD_PS_PATH, "LICENSE")
-                        text_metadata.create_text_file(soda, False, metadata_path, "LICENSE")
-                        list_upload_metadata_files.append(metadata_path)
-                        main_total_generate_dataset_size += getsize(metadata_path)
-                        total_files += 1
-                        total_metadata_files += 1
-
+            # For brand new datasets, no existing files to check
+            create_metadata_files_for_upload(soda, list_upload_metadata_files)
 
 
         else:
-
             vs = ums.df_mid_has_progress()
 
             if resume == False or resume == True and not vs:
@@ -2478,98 +2258,9 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                 # 3. Add high-level metadata files to a list
                 if "dataset_metadata" in soda.keys():
                     logger.info("ps_create_new_dataset (optional) step 3 create high level metadata list")
-                    # TODO: Add enahnced merge support post SDS3 launch
-                    # (
-                    #     my_bf_existing_files_name,
-                    #     _,
-                    # ) = ps_get_existing_files_details(ds)
-                    for key, _ in soda["dataset_metadata"].items():
-                        if key == "submission":
-                            metadata_path = os.path.join(METADATA_UPLOAD_PS_PATH, "submission.xlsx")
-                            submission.create_excel(soda, False, metadata_path)
-                            list_upload_metadata_files.append(metadata_path)
-                            main_total_generate_dataset_size += getsize(metadata_path)
-                            total_files += 1
-                            total_metadata_files += 1
-                        if key == "subjects":
-                            metadata_path = os.path.join(METADATA_UPLOAD_PS_PATH, "subjects.xlsx")
-                            subjects.create_excel(soda, False, metadata_path)
-                            list_upload_metadata_files.append(metadata_path)
-                            main_total_generate_dataset_size += getsize(metadata_path)
-                            total_files += 1
-                            total_metadata_files += 1
-                        if key == "samples":
-                            metadata_path = os.path.join(METADATA_UPLOAD_PS_PATH, "samples.xlsx")
-                            samples.create_excel(soda, False, metadata_path)
-                            list_upload_metadata_files.append(metadata_path)
-                            main_total_generate_dataset_size += getsize(metadata_path)
-                            total_files += 1
-                            total_metadata_files += 1
-                        if key == "performances":
-                            metadata_path = os.path.join(METADATA_UPLOAD_PS_PATH, "performances.xlsx")
-                            performances.create_excel(soda, False, metadata_path)
-                            list_upload_metadata_files.append(metadata_path)
-                            main_total_generate_dataset_size += getsize(metadata_path)
-                            total_files += 1
-                            total_metadata_files += 1
-                        if key == "resources":
-                            metadata_path = os.path.join(METADATA_UPLOAD_PS_PATH, "resources.xlsx")
-                            resources.create_excel(soda, False, metadata_path)
-                            list_upload_metadata_files.append(metadata_path)
-                            main_total_generate_dataset_size += getsize(metadata_path)
-                            total_files += 1
-                            total_metadata_files += 1
-                        if key == "sites":
-                            metadata_path = os.path.join(METADATA_UPLOAD_PS_PATH, "sites.xlsx")
-                            sites.create_excel(soda, False, metadata_path)
-                            list_upload_metadata_files.append(metadata_path)
-                            main_total_generate_dataset_size += getsize(metadata_path)
-                            total_files += 1
-                            total_metadata_files += 1
-                        if key == "dataset_description":
-                            metadata_path = os.path.join(METADATA_UPLOAD_PS_PATH, "dataset_description.xlsx")
-                            dataset_description.create_excel(soda, False, metadata_path)
-                            list_upload_metadata_files.append(metadata_path)
-                            main_total_generate_dataset_size += getsize(metadata_path)
-                            total_files += 1
-                            total_metadata_files += 1
-                        if key == "code_description":
-                            metadata_path = os.path.join(METADATA_UPLOAD_PS_PATH, "code_description.xlsx")
-                            code_description.create_excel(soda, False, metadata_path)
-                            list_upload_metadata_files.append(metadata_path)
-                            main_total_generate_dataset_size += getsize(metadata_path)
-                            total_files += 1
-                            total_metadata_files += 1
-                        if key == "manifest_file":
-                            metadata_path = os.path.join(METADATA_UPLOAD_PS_PATH, "manifest.xlsx")
-                            manifest.create_excel(soda, False, metadata_path)
-                            list_upload_metadata_files.append(metadata_path)
-                            main_total_generate_dataset_size += getsize(metadata_path)
-                            total_files += 1
-                            total_metadata_files += 1
-                        if key == "README.md":
-                            metadata_path = os.path.join(METADATA_UPLOAD_PS_PATH, "README.md")
-                            text_metadata.create_text_file(soda, False, metadata_path, "README.md")
-                            list_upload_metadata_files.append(metadata_path)
-                            main_total_generate_dataset_size += getsize(metadata_path)
-                            total_files += 1
-                            total_metadata_files += 1
-                        if key == "CHANGES":
-                            metadata_path = os.path.join(METADATA_UPLOAD_PS_PATH, "CHANGES")
-                            text_metadata.create_text_file(soda, False, metadata_path, "CHANGES")
-                            list_upload_metadata_files.append(metadata_path)
-                            main_total_generate_dataset_size += getsize(metadata_path)
-                            total_files += 1
-                            total_metadata_files += 1
-                        if key == "LICENSE":
-                            metadata_path = os.path.join(METADATA_UPLOAD_PS_PATH, "LICENSE")
-                            text_metadata.create_text_file(soda, False, metadata_path, "LICENSE")
-                            list_upload_metadata_files.append(metadata_path)
-                            main_total_generate_dataset_size += getsize(metadata_path)
-                            total_files += 1
-                            total_metadata_files += 1
-
-
+                    # Get existing root-level files from tracking structure
+                    existing_root_files = tracking_json_structure.get("children", {}).get("files", {})
+                    create_metadata_files_for_upload(soda, list_upload_metadata_files, existing_root_files, existing_file_option)
 
 
                 # 4. Prepare and add manifest files to a list
@@ -3062,121 +2753,25 @@ curation_error_message = ""
 
 def ps_check_dataset_files_validity(soda):
     """
-    Function to check that the bf data files and folders specified in the dataset are valid
+    Minimal validation for the selected Pennsieve dataset.
 
     Args:
-        dataset_structure: soda dict with information about all specified files and folders
+        soda: SODA request object with ps-dataset-selected
+
     Output:
-        error: error message with list of non valid local data files, if any
+        [] (no validation errors)
     """
-    def check_folder_validity(folder_id, folder_dict, folder_path, error):
-        """
-        Function to verify that the subfolders and files specified in the dataset are valid
-
-        Args:
-            folder_id: id of the folder in the dataset
-            folder_dict: dict with information about the folder
-            folder_path: path of the folder in the dataset
-            error: error message with list of non valid files/folders, if any
-        Output:
-            error: error message with list of non valid files/folders, if any
-        """
-        # get the folder content through Pennsieve api
-        limit = 100
-        offset = 0
-        folder_content = []
-        while True: 
-            r = requests.get(f"{PENNSIEVE_URL}/packages/{folder_id}?offset={offset}&limit={limit}", headers=create_request_headers(get_access_token()))
-            r.raise_for_status()
-            page = r.json()["children"]
-            folder_content.extend(page)
-            if len(page) < limit:
-                break
-            offset += limit
-
-        # check that the subfolders and files specified in the dataset are valid
-        if "files" in folder_dict.keys():
-            for file_key, file in folder_dict["files"].items():
-                file_type = file.get("location")
-                relative_path = (f"{folder_path}/{file_key}")
-                # If file is from Pennsieve we verify if file exists on Pennsieve
-                if file_type == "ps":
-                    file_actions = file["action"]
-                    file_id = file["path"]
-                    if "moved" in file_actions:
-                        try:
-                            r = requests.get(f"{PENNSIEVE_URL}/packages/{file_id}/view", headers=create_request_headers(get_access_token()))
-                            r.raise_for_status()
-                        except Exception as e:
-                            error.append(f"{relative_path} id: {file_id}")
-                        continue
-                    if next((item for item in folder_content if item["content"]["id"] == file_id), None) is None:
-                        error.append(f"{relative_path} id: {file_id}")
-        
-        if "folders" in folder_dict.keys():
-            for folder_key, folder in folder_dict["folders"].items():
-                folder_type = folder.get("location")
-                relative_path = (f"{folder_path}/{folder_key}")
-                if folder_type == "ps":
-                    folder_id = folder["path"]
-                    folder_action = folder["action"]
-                    if "moved" in folder_action:
-                        try:
-                            r = requests.get(f"{PENNSIEVE_URL}/packages/{folder_id}", headers=create_request_headers(get_access_token()))
-                            r.raise_for_status()
-                        except Exception as e:
-                            error.append(f"{relative_path} id: {folder_id}")
-                        continue
-                    if next((item for item in folder_content if item["content"]["id"] == folder_id), None) is None:
-                        error.append(f"{relative_path} id: {folder_id}")
-                    else:
-                        check_folder_validity(folder_id, folder, relative_path, error)
-
-        return error
-
-    error = []
-    # check that the files and folders specified in the dataset are valid
     dataset_name = soda["ps-dataset-selected"]["dataset-name"]
     dataset_id = get_dataset_id(dataset_name)
     r = requests.get(f"{PENNSIEVE_URL}/datasets/{dataset_id}", headers=create_request_headers(get_access_token()))
     r.raise_for_status()
     root_folder = r.json()["children"]
 
+    # if empty dataset, still considered valid in the context of stub validation
     if len(root_folder) == 0:
-        return error
+        return []
 
-    if "dataset-structure" in soda.keys():
-        dataset_structure = soda["dataset-structure"]
-        if "folders" in dataset_structure:
-            for folder_key, folder in dataset_structure["folders"].items():
-                folder_type = folder.get("location")
-                relative_path = folder_key
-                if folder_type == "ps":
-                    collection_id = folder["path"]
-                    collection_actions = folder["action"]
-                    if "moved" in collection_actions:
-                        try:
-                            r = requests.get(f"{PENNSIEVE_URL}/packages/{collection_id}/view", headers=create_request_headers(get_access_token()))
-                            r.raise_for_status()
-                        except Exception:
-                            error.append(f"{relative_path} id: {collection_id}")
-                        continue
-                    if next((item for item in root_folder if item["content"]["id"] == collection_id), None) is None:
-                        error.append(f"{relative_path} id: {collection_id}")
-                    else:
-                        # recursively check all files + subfolders of collection_id
-                        error = check_folder_validity(collection_id, folder, relative_path, error)
-
-    # if there are items in the error list, check if they have been "moved"
-    if len(error) > 0:
-        error_message = [
-            "Error: The following Pennsieve files/folders are invalid. Specify them again or remove them."
-        ]
-        error = error_message + error
-
-    return error
-
-
+    return []
 def check_server_access_to_files(file_list):
     # Return two lists, one that the server can open, and one that it can not.
     # This is to avoid the server trying to open files that it does not have access to.cf
@@ -3302,7 +2897,7 @@ def uploading_with_ps_account(soda):
     return "ps-account-selected" in soda
 
 def uploading_to_existing_ps_dataset(soda):
-    return "ps-dataset-selected" in soda
+    return (soda.get("starting-point") is not None and soda["starting-point"].get("origin") == "ps")
 
 def can_resume_prior_upload(resume_status):
     global ums 
@@ -3373,15 +2968,14 @@ def generate_dataset(soda, resume, ps):
 
     # Generate dataset to Pennsieve
     if generating_on_ps(soda):
-        main_generate_destination = soda["generate-dataset"][
-            "destination"
-        ]
-        generate_option = soda["generate-dataset"]["generate-option"]
+        main_generate_destination = soda["generate-dataset"]["destination"]
 
         logger.info("generate_dataset generating_on_ps")
+        logger.info(f"  resume={resume}, can_resume={can_resume_prior_upload(resume)}")
+        logger.info(f"  uploading_to_existing={uploading_to_existing_ps_dataset(soda)}")
 
-        if uploading_to_existing_ps_dataset(soda)  and soda["starting-point"]["origin"] != "new":
-            
+        if uploading_to_existing_ps_dataset(soda):
+            logger.info("PATH: Existing PS Dataset")
             selected_dataset_id = get_dataset_id(
                 soda["ps-dataset-selected"]["dataset-name"]
             )
@@ -3390,29 +2984,26 @@ def generate_dataset(soda, resume, ps):
             r.raise_for_status()
             myds = r.json()
 
-            if can_resume_prior_upload(resume): 
+            if can_resume_prior_upload(resume):
+                logger.info("PATH: Existing PS Dataset -> RESUME -> ps_upload_to_dataset")
                 ps_upload_to_dataset(soda, ps, myds, resume)
             else:
+                logger.info("PATH: Existing PS Dataset -> FRESH -> ps_update_existing_dataset")
                 ps_update_existing_dataset(soda, myds, ps, resume)
-
-        elif generate_option == "new" or generate_option == "existing-ps" and soda["starting-point"]["origin"] == "new":
-            # if dataset name is in the generate-dataset section, we are generating a new dataset
-            if "dataset-name" in soda["generate-dataset"]:
-                dataset_name = soda["generate-dataset"][
-                    "dataset-name"
-                ]
-            elif "digital-metadata" in soda and "name" in soda["digital-metadata"]:
-                dataset_name = soda["digital-metadata"]["name"]
-            elif "ps-dataset-selected" in soda and "dataset-name" in soda["ps-dataset-selected"]:
-                dataset_name = soda["ps-dataset-selected"]["dataset-name"]
-            
-            if resume: 
+        else:
+            logger.info("PATH: New PS Dataset")
+            dataset_name = soda["generate-dataset"]["dataset-name"]
+            if resume:
+                logger.info("PATH: New PS Dataset -> RESUME -> generate_new_ds_ps_resume")
                 generate_new_ds_ps_resume(soda, dataset_name, ps)
-            else: 
+            else:
+                logger.info("PATH: New PS Dataset -> FRESH -> checking if dataset exists")
                 try: 
                     selected_dataset_id = get_dataset_id(dataset_name)
+                    logger.info(f"PATH: New PS Dataset -> FRESH -> dataset exists ({selected_dataset_id}) -> ps_upload_to_dataset")
                 except Exception as e:
                     if isinstance(e, PennsieveDatasetCannotBeFound):
+                        logger.info("PATH: New PS Dataset -> FRESH -> dataset not found -> generate_new_ds_ps")
                         generate_new_ds_ps(soda, dataset_name, ps)
                         return
                     else:
@@ -3619,14 +3210,17 @@ def main_curate_function(soda, resume):
     # 2] Generate
     main_curate_progress_message = "Generating dataset"
     try:
-        if (soda["generate-dataset"]["destination"] == "local"):
+        destination = soda["generate-dataset"]["destination"]
+        ps = None
+        
+        if destination == "local":
             logger.info("main_curate_function generating locally")
-            generate_dataset(soda, resume, ps=None)
         else:
             logger.info("main_curate_function generating on Pennsieve")
             accountname = soda["ps-account-selected"]["account-name"]
             ps = connect_pennsieve_client(accountname)
-            generate_dataset(soda, resume, ps)
+        
+        generate_dataset(soda, resume, ps)
     except Exception as e:
         logger.error(f"An error occurred in main_curate_function function: {str(e)}")
         main_curate_status = "Done"
