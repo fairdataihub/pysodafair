@@ -1614,13 +1614,6 @@ def ps_update_existing_dataset(soda, ds, ps, resume):
         else:
             soda["manifest-files"] = {"destination": "ps"}
 
-    soda["generate-dataset"] = {
-        "destination": "ps",
-        "if-existing": "merge",
-        "if-existing-files": "replace",
-        "generate-option": "existing-ps"
-    }
-
     end = timer()
     logger.info(f"Time for ps_update_existing_dataset function: {timedelta(seconds=end - start)}")
     ps_upload_to_dataset(soda, ps, ds, resume)
@@ -1693,25 +1686,79 @@ bytes_file_path_dict = {}
 
 # retry variables instantiated outside function
 list_of_files_to_rename = {}
-renamed_files_counter = 0 
+renamed_files_counter = 0
+total_files = 0
+total_metadata_files = 0
+total_manifest_files = 0
 
 
 def create_metadata_files_for_upload(soda, list_upload_metadata_files, existing_root_files=None, existing_file_option="skip"):
     """
     Creates metadata files (Excel and text) based on soda["dataset_metadata"] and appends them to the upload list.
+    Updates global counters for total files and sizes.
     
     Args:
-        soda: The soda JSON object
+        soda: The soda configuration object containing dataset_metadata
         list_upload_metadata_files: List to append created metadata file paths to
-        existing_root_files: Dict of existing files at root level on Pennsieve (filename -> file info)
-        existing_file_option: How to handle existing files - "skip", "replace", or "duplicate"
+        existing_root_files: Dict of files already at the root of the Pennsieve dataset (optional)
+        existing_file_option: How to handle existing files - "skip", "replace", or "merge" (default: "skip")
     """
     global main_total_generate_dataset_size
     global total_files
     global total_metadata_files
 
-    # Map metadata keys to their file creation functions and filenames
-    excel_metadata = {
+    logger.info(f"create_metadata_files_for_upload: Starting with existing_file_option='{existing_file_option}', existing_root_files={'present' if existing_root_files else 'None'}")
+
+    if "dataset_metadata" not in soda:
+        logger.info("create_metadata_files_for_upload: No dataset_metadata found in soda, returning early")
+        return
+
+    # Normalize existing files for lookup (case-insensitive filename)
+    existing_filenames = set()
+    if existing_root_files:
+        for file_key in existing_root_files:
+            existing_filenames.add(file_key.lower())
+        logger.info(f"create_metadata_files_for_upload: Found {len(existing_filenames)} existing files at dataset root: {list(existing_filenames)}")
+
+    files_created = 0
+    files_skipped = 0
+
+    def should_upload_file(filename):
+        """Check if a metadata file should be uploaded based on existing files and option."""
+        nonlocal files_skipped
+        if not existing_root_files:
+            return True  # No existing files to check against
+        
+        filename_lower = filename.lower()
+        file_exists = filename_lower in existing_filenames
+        
+        if file_exists and existing_file_option == "skip":
+            logger.info(f"create_metadata_files_for_upload: Skipping '{filename}' - already exists on Pennsieve (if-existing-files='skip')")
+            files_skipped += 1
+            return False
+        elif file_exists and existing_file_option == "replace":
+            logger.info(f"create_metadata_files_for_upload: Will replace existing '{filename}' on Pennsieve (if-existing-files='replace')")
+            return True
+        elif file_exists:
+            logger.info(f"create_metadata_files_for_upload: '{filename}' exists, uploading anyway (if-existing-files='{existing_file_option}')")
+            return True
+        
+        return True  # File doesn't exist
+
+    def add_metadata_file(filepath, filename):
+        """Helper to register a created metadata file and update counters."""
+        nonlocal files_created
+        global main_total_generate_dataset_size, total_files, total_metadata_files
+        file_size = getsize(filepath)
+        list_upload_metadata_files.append(filepath)
+        main_total_generate_dataset_size += file_size
+        total_files += 1
+        total_metadata_files += 1
+        files_created += 1
+        logger.info(f"create_metadata_files_for_upload: Created '{filename}' ({file_size} bytes) - added to upload list")
+
+    # Excel metadata: soda key -> (create function, output filename)
+    EXCEL_METADATA = {
         "submission": (submission.create_excel, "submission.xlsx"),
         "subjects": (subjects.create_excel, "subjects.xlsx"),
         "samples": (samples.create_excel, "samples.xlsx"),
@@ -1723,60 +1770,26 @@ def create_metadata_files_for_upload(soda, list_upload_metadata_files, existing_
         "manifest_file": (manifest.create_excel, "manifest.xlsx"),
     }
 
-    text_metadata_files = {
-        "README.md": "README.md",
-        "CHANGES": "CHANGES",
-        "LICENSE": "LICENSE",
-    }
+    # Text metadata files (soda key matches filename)
+    TEXT_METADATA = ["README.md", "CHANGES", "LICENSE"]
 
-    if "dataset_metadata" not in soda:
-        return
+    for key in soda["dataset_metadata"]:
+        if key in EXCEL_METADATA:
+            create_func, filename = EXCEL_METADATA[key]
+            if not should_upload_file(filename):
+                continue
+            filepath = os.path.join(METADATA_UPLOAD_PS_PATH, filename)
+            create_func(soda, False, filepath)
+            add_metadata_file(filepath, filename)
 
-    existing_root_files = existing_root_files or {}
+        elif key in TEXT_METADATA:
+            if not should_upload_file(key):
+                continue
+            filepath = os.path.join(METADATA_UPLOAD_PS_PATH, key)
+            text_metadata.create_text_file(soda, False, filepath, key)
+            add_metadata_file(filepath, key)
 
-    for key in soda["dataset_metadata"].keys():
-        if key in excel_metadata:
-            create_func, filename = excel_metadata[key]
-            
-            # Check if file already exists on Pennsieve
-            if filename in existing_root_files:
-                if existing_file_option == "skip":
-                    logger.info(f"Skipping metadata file {filename} - already exists on Pennsieve")
-                    continue
-                elif existing_file_option == "replace":
-                    # Delete existing file on Pennsieve
-                    file_id = existing_root_files[filename]["content"]["id"]
-                    logger.info(f"Replacing metadata file {filename} on Pennsieve")
-                    r = requests.post(f"{PENNSIEVE_URL}/data/delete", json={"things": [file_id]}, headers=create_request_headers(get_access_token()))
-                    r.raise_for_status()
-            
-            metadata_path = os.path.join(METADATA_UPLOAD_PS_PATH, filename)
-            create_func(soda, False, metadata_path)
-            list_upload_metadata_files.append(metadata_path)
-            main_total_generate_dataset_size += getsize(metadata_path)
-            total_files += 1
-            total_metadata_files += 1
-        elif key in text_metadata_files:
-            filename = text_metadata_files[key]
-            
-            # Check if file already exists on Pennsieve
-            if filename in existing_root_files:
-                if existing_file_option == "skip":
-                    logger.info(f"Skipping metadata file {filename} - already exists on Pennsieve")
-                    continue
-                elif existing_file_option == "replace":
-                    # Delete existing file on Pennsieve
-                    file_id = existing_root_files[filename]["content"]["id"]
-                    logger.info(f"Replacing metadata file {filename} on Pennsieve")
-                    r = requests.post(f"{PENNSIEVE_URL}/data/delete", json={"things": [file_id]}, headers=create_request_headers(get_access_token()))
-                    r.raise_for_status()
-            
-            metadata_path = os.path.join(METADATA_UPLOAD_PS_PATH, filename)
-            text_metadata.create_text_file(soda, False, metadata_path, filename)
-            list_upload_metadata_files.append(metadata_path)
-            main_total_generate_dataset_size += getsize(metadata_path)
-            total_files += 1
-            total_metadata_files += 1
+    logger.info(f"create_metadata_files_for_upload: Completed - {files_created} files created, {files_skipped} files skipped")
 
 
 def ps_upload_to_dataset(soda, ps, ds, resume=False):
@@ -1807,6 +1820,8 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
     global main_curate_status
     global list_of_files_to_rename
     global renamed_files_counter
+    global total_metadata_files
+    global total_manifest_files
 
 
 
@@ -2217,8 +2232,9 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                 # therefore, we can assume the dataset structure is the same as the tracking structure
                 brand_new_dataset = True
                 list_upload_files = recursive_dataset_scan_for_new_upload(dataset_structure, list_upload_files, relative_path)
-
-            # For brand new datasets, no existing files to check
+                
+            # For brand new datasets, no existing files to check - upload all metadata files
+            logger.info("ps_upload_to_dataset: Creating metadata files for brand new dataset (no existing file checks needed)")
             create_metadata_files_for_upload(soda, list_upload_metadata_files)
 
 
@@ -2258,9 +2274,14 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                 # 3. Add high-level metadata files to a list
                 if "dataset_metadata" in soda.keys():
                     logger.info("ps_create_new_dataset (optional) step 3 create high level metadata list")
-                    # Get existing root-level files from tracking structure
+                    # Check existing root files to respect if-existing-files option
                     existing_root_files = tracking_json_structure.get("children", {}).get("files", {})
-                    create_metadata_files_for_upload(soda, list_upload_metadata_files, existing_root_files, existing_file_option)
+                    create_metadata_files_for_upload(
+                        soda, 
+                        list_upload_metadata_files,
+                        existing_root_files=existing_root_files,
+                        existing_file_option=existing_file_option
+                    )
 
 
                 # 4. Prepare and add manifest files to a list
@@ -2988,7 +3009,7 @@ def generate_dataset(soda, resume, ps):
                 logger.info("PATH: Existing PS Dataset -> RESUME -> ps_upload_to_dataset")
                 ps_upload_to_dataset(soda, ps, myds, resume)
             else:
-                logger.info("PATH: Existing PS Dataset -> FRESH -> ps_update_existing_dataset")
+                logger.info("PATH: Existing PS Dataset -> NO RESUME -> ps_update_existing_dataset")
                 ps_update_existing_dataset(soda, myds, ps, resume)
         else:
             logger.info("PATH: New PS Dataset")
@@ -2997,13 +3018,13 @@ def generate_dataset(soda, resume, ps):
                 logger.info("PATH: New PS Dataset -> RESUME -> generate_new_ds_ps_resume")
                 generate_new_ds_ps_resume(soda, dataset_name, ps)
             else:
-                logger.info("PATH: New PS Dataset -> FRESH -> checking if dataset exists")
+                logger.info("PATH: New PS Dataset -> NO RESUME -> checking if dataset exists")
                 try: 
                     selected_dataset_id = get_dataset_id(dataset_name)
-                    logger.info(f"PATH: New PS Dataset -> FRESH -> dataset exists ({selected_dataset_id}) -> ps_upload_to_dataset")
+                    logger.info(f"PATH: New PS Dataset -> NO RESUME -> dataset exists ({selected_dataset_id}) -> ps_upload_to_dataset")
                 except Exception as e:
                     if isinstance(e, PennsieveDatasetCannotBeFound):
-                        logger.info("PATH: New PS Dataset -> FRESH -> dataset not found -> generate_new_ds_ps")
+                        logger.info("PATH: New PS Dataset -> NO RESUME -> dataset not found -> generate_new_ds_ps")
                         generate_new_ds_ps(soda, dataset_name, ps)
                         return
                     else:
