@@ -32,7 +32,6 @@ def get_template_path(filename):
         templates_dir = os.path.dirname(metadata_templates.__file__)
         template_path = os.path.join(templates_dir, filename)
         if os.path.exists(template_path):
-            logger.info(f"Template found in metadata_templates module: {template_path}")
             return template_path
     except (ImportError, ModuleNotFoundError, AttributeError):
         pass
