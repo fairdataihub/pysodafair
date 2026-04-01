@@ -1709,7 +1709,7 @@ def create_metadata_files_for_upload(soda, list_upload_metadata_files, existing_
 
     logger.info(f"create_metadata_files_for_upload: Starting with existing_file_option='{existing_file_option}', existing_root_files={'present' if existing_root_files else 'None'}")
 
-    if "dataset_metadata" not in soda:
+    if "dataset_metadata" not in soda or soda["dataset_metadata"] == {}:
         logger.info("create_metadata_files_for_upload: No dataset_metadata found in soda, returning early")
         return
 
