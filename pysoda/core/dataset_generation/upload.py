@@ -2487,48 +2487,109 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
         if list_of_files_to_rename:
             renaming_files_flow = True
             logger.info("ps_create_new_dataset (optional) step 8 rename files")
+            logger.info(f"rename_files: Starting - {len(list_of_files_to_rename)} folders with files to rename")
+            logger.info(f"rename_files: Files to rename keys: {list(list_of_files_to_rename.keys())}")
+            logger.info(f"rename_files: Full rename structure: {list_of_files_to_rename}")
             main_curate_progress_message = ("Preparing files to be renamed...")
             dataset_id = ds["content"]["id"]
             collection_ids = {}
+            
+            # Check if any files need to be renamed inside folders (vs root level)
+            needs_collections = False
+            for key in list_of_files_to_rename:
+                # If key is not empty/"" and not just "/", we need to find collections
+                if key and key != "/" and key.strip():
+                    needs_collections = True
+                    break
+            
+            logger.info(f"rename_files: needs_collections={needs_collections}")
+            
             # gets the high level folders in the dataset
+            logger.info(f"rename_files: Fetching dataset children for dataset_id={dataset_id}")
             r = requests.get(f"{PENNSIEVE_URL}/datasets/{dataset_id}", headers=create_request_headers(ps))
             r.raise_for_status()
             dataset_content = r.json()["children"]
+            logger.info(f"rename_files: Initial dataset_content has {len(dataset_content)} items")
 
             if dataset_content == []:
+                logger.info("rename_files: dataset_content is empty, waiting for Pennsieve to process...")
+                wait_count = 0
                 while dataset_content == []:
+                    wait_count += 1
+                    logger.info(f"rename_files: Waiting for dataset children (attempt {wait_count})...")
                     time.sleep(3)
                     r = requests.get(f"{PENNSIEVE_URL}/datasets/{dataset_id}", headers=create_request_headers(ps))
                     r.raise_for_status()
                     dataset_content = r.json()["children"]
+                logger.info(f"rename_files: dataset_content now has {len(dataset_content)} items after {wait_count} attempts")
 
-            collections_found = False
-            while not collections_found:
-                for item in dataset_content:
-                    # high lvl folders' ids are stored to be used to find the file IDS
-                    if item["content"]["packageType"] == "Collection":
-                        collections_found = True
-                        collection_ids[item["content"]["name"]] = {"id": item["content"]["nodeId"]}
+            # Only look for collections if we actually need them (files inside folders)
+            if needs_collections:
+                collections_found = False
+                logger.info("rename_files: Looking for collections (folders) in dataset_content...")
+                wait_count = 0
+                max_wait_attempts = 60  # ~3 minutes max wait
+                while not collections_found:
+                    for item in dataset_content:
+                        # high lvl folders' ids are stored to be used to find the file IDS
+                        # Note: Pennsieve may return "Collection" or "Unsupported" for folders depending on processing state
+                        package_type = item["content"]["packageType"]
+                        if package_type == "Collection":
+                            collections_found = True
+                            collection_ids[item["content"]["name"]] = {"id": item["content"]["nodeId"]}
 
 
-                if not collections_found:
-                    # No collections were found, metadata files were processed but not the high level folders
-                    time.sleep(3)
-                    r = requests.get(f"{PENNSIEVE_URL}/datasets/{dataset_id}", headers=create_request_headers(ps))
-                    r.raise_for_status()
-                    dataset_content = r.json()["children"]
+                    if not collections_found:
+                        wait_count += 1
+                        # Log detailed info about items found
+                        item_details = [(item['content'].get('name', 'unknown'), item['content']['packageType']) for item in dataset_content]
+                        logger.info(f"rename_files: No collections found yet (attempt {wait_count}/{max_wait_attempts}), found {len(dataset_content)} items: {item_details}")
+                        
+                        if wait_count >= max_wait_attempts:
+                            logger.error(f"rename_files: Timeout waiting for collections after {max_wait_attempts} attempts. Items found: {item_details}")
+                            raise Exception(f"Timeout waiting for Pennsieve to process folders. Found {len(dataset_content)} items but none are Collections. This may indicate the upload is still processing or failed.")
+                        
+                        time.sleep(3)
+                        r = requests.get(f"{PENNSIEVE_URL}/datasets/{dataset_id}", headers=create_request_headers(ps))
+                        r.raise_for_status()
+                        dataset_content = r.json()["children"]
+
+                logger.info(f"rename_files: Found {len(collection_ids)} collections: {list(collection_ids.keys())}")
+            else:
+                logger.info("rename_files: No collections needed - all files are at root level")
 
             for key in list_of_files_to_rename:
+                logger.info(f"rename_files: Processing folder key='{key}'")
+                
+                # Handle root-level files (empty key or "/")
+                if not key or key == "/" or not key.strip():
+                    logger.info(f"rename_files: Files are at root level, looking for files directly in dataset")
+                    # Store dataset_id as the "folder id" for root level
+                    if "id" not in list_of_files_to_rename[key]:
+                        list_of_files_to_rename[key]["id"] = dataset_id
+                    
+                    for item in dataset_content:
+                        if item["content"]["packageType"] != "Collection":
+                            file_name = item["content"]["name"]
+                            file_id = item["content"]["nodeId"]
+                            
+                            if file_name in list_of_files_to_rename[key]:
+                                logger.info(f"rename_files: Found root-level file to rename: '{file_name}' -> id={file_id}")
+                                list_of_files_to_rename[key][file_name]["id"] = file_id
+                    continue
+                
                 # split the key up if there are multiple folders in the relative path
                 relative_path = key.split("/")
                 high_lvl_folder_name = relative_path[0]
                 subfolder_level = 0
                 subfolder_amount = len(relative_path) - 1
+                logger.info(f"rename_files: high_lvl_folder='{high_lvl_folder_name}', subfolder_amount={subfolder_amount}")
 
                 if high_lvl_folder_name in collection_ids:
                     # subfolder_amount will be the amount of subfolders we need to call until we can get the file ID to rename
 
                     high_lvl_folder_id = collection_ids[high_lvl_folder_name]["id"]
+                    logger.info(f"rename_files: Fetching children of folder_id={high_lvl_folder_id}")
                     limit = 100
                     offset = 0
                     dataset_content = []
@@ -2542,9 +2603,15 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                             break
                         offset += limit
 
+                    logger.info(f"rename_files: Folder has {len(dataset_content)} children")
+
                     if dataset_content == []:
                         # request until there is no children content, (folder is empty so files have not been processed yet)
+                        logger.info(f"rename_files: Folder is empty, waiting for files to be processed...")
+                        wait_count = 0
                         while dataset_content == []:
+                            wait_count += 1
+                            logger.info(f"rename_files: Waiting for folder children (attempt {wait_count})...")
                             time.sleep(3)
                             limit = 100 
                             offset = 0 
@@ -2557,10 +2624,12 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                                 if len(page) < limit:
                                     break
                                 offset += limit
+                        logger.info(f"rename_files: Folder now has {len(dataset_content)} children after {wait_count} attempts")
                             
 
                     if subfolder_amount == 0:
                         # the file is in the high level folder
+                        logger.info(f"rename_files: Files are in high level folder, no subfolders to traverse")
                         if "id" not in list_of_files_to_rename[key]:
                             # store the id of the folder to be used again in case the file id is not found (happens when not all files have been processed yet)
                             list_of_files_to_rename[key]["id"] = high_lvl_folder_id
@@ -2574,14 +2643,21 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                                 if file_name in list_of_files_to_rename[key]:
                                     # name
                                     # store the package id for now
+                                    logger.info(f"rename_files: Found file to rename: '{file_name}' -> id={file_id}")
                                     list_of_files_to_rename[key][file_name]["id"] = file_id
                     else:
                         # file is within a subfolder and we recursively iterate until we get to the last subfolder needed
+                        logger.info(f"rename_files: Traversing {subfolder_amount} subfolder(s) to find files")
                         subfolder_id = collection_ids[high_lvl_folder_name]["id"]
                         while subfolder_level != subfolder_amount:
+                            logger.info(f"rename_files: Subfolder traversal - level {subfolder_level}/{subfolder_amount}")
                             if dataset_content == []:
                                 # subfolder has no content so request again
+                                logger.info(f"rename_files: Subfolder is empty, waiting...")
+                                wait_count = 0
                                 while dataset_content == []:
+                                    wait_count += 1
+                                    logger.info(f"rename_files: Waiting for subfolder children (attempt {wait_count})...")
                                     time.sleep(3)
                                     limit = 100 
                                     offset = 0
@@ -2593,6 +2669,7 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                                         if len(page) < limit:
                                             break
                                         offset += limit
+                                logger.info(f"rename_files: Subfolder now has {len(dataset_content)} children after {wait_count} attempts")
                         
 
                             for item in dataset_content:
@@ -2602,6 +2679,7 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
 
                                     if folder_name in relative_path:
                                         # we have found the folder we need to iterate through
+                                        logger.info(f"rename_files: Found matching subfolder '{folder_name}'")
                                         subfolder_level += 1
 
                                         limit = 100
@@ -2616,10 +2694,16 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                                                 break
                                             offset += limit
 
+                                        logger.info(f"rename_files: Subfolder '{folder_name}' has {len(children)} children")
+
                                         if subfolder_level != subfolder_amount:
                                             dataset_content = children
                                             if dataset_content == []:
+                                                logger.info(f"rename_files: Intermediate subfolder is empty, waiting...")
+                                                wait_count = 0
                                                 while dataset_content == []:
+                                                    wait_count += 1
+                                                    logger.info(f"rename_files: Waiting for intermediate subfolder children (attempt {wait_count})...")
                                                     # subfolder has no content so request again
                                                     time.sleep(3)
                                                     limit = 100
@@ -2632,11 +2716,13 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                                                         if len(page) < limit:
                                                             break
                                                         offset += limit
+                                                logger.info(f"rename_files: Intermediate subfolder now has {len(dataset_content)} children after {wait_count} attempts")
                                                     
                                             subfolder_id = folder_id
                                             break
                                         else:
                                             # we are at the last folder in the relative path, we can get the file id
+                                            logger.info(f"rename_files: At final subfolder, looking for files to rename")
                                             if "id" not in list_of_files_to_rename[key]:
                                                 # store the id of the last folder to directly call later in case not all files get an id
                                                 list_of_files_to_rename[key]["id"] = folder_id
@@ -2647,9 +2733,14 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
 
                                                     if file_name in list_of_files_to_rename[key]:
                                                         # store the package id for renaming
+                                                        logger.info(f"rename_files: Found file to rename: '{file_name}' -> id={file_id}")
                                                         list_of_files_to_rename[key][file_name]["id"] = file_id
                                     else:
                                         continue
+                else:
+                    logger.warning(f"rename_files: high_lvl_folder '{high_lvl_folder_name}' not found in collection_ids!")
+
+            logger.info("rename_files: Finished gathering file IDs for renaming")
 
             # 8.5 Rename files - All or most ids have been fetched now rename the files or gather the ids again if not all files have been processed at this time
             main_curate_progress_message = "Renaming files..."
