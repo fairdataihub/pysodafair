@@ -2381,12 +2381,24 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                 first_relative_path = list_upload_files[0][6]
                 first_final_name = list_upload_files[0][4][0]
 
-            folder_name = first_relative_path[first_relative_path.index("/")+1:]
+            # Extract folder_name (subfolder path) and high_lvl_folder from relative_path
+            try:
+                slash_idx = first_relative_path.index("/")
+                folder_name = first_relative_path[slash_idx+1:]
+                first_high_lvl_folder = first_relative_path[:slash_idx]
+            except ValueError:
+                # No slash in path - entire path is the high-level folder, no subfolders
+                folder_name = ""
+                first_high_lvl_folder = first_relative_path
 
             if first_final_name != basename(first_file_local_path):
                 # if file name is not the same as local path, then it has been renamed in SODA
                 if folder_name not in list_of_files_to_rename:
-                    list_of_files_to_rename[folder_name] = {}
+                    list_of_files_to_rename[folder_name] = {"high_lvl_folder": first_high_lvl_folder}
+                else:
+                    # Entry exists but may not have high_lvl_folder set
+                    if "high_lvl_folder" not in list_of_files_to_rename[folder_name]:
+                        list_of_files_to_rename[folder_name]["high_lvl_folder"] = first_high_lvl_folder
                 if basename(first_file_local_path) not in list_of_files_to_rename[folder_name]:
                     list_of_files_to_rename[folder_name][basename(first_file_local_path)] = {
                         "final_file_name": first_final_name,
@@ -2421,9 +2433,13 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                         final_file_name_list = folderInformation[4]
                     # get the substring from the string relative_path that starts at the index of the / and contains the rest of the string
                     try:
-                        folder_name = relative_path[relative_path.index("/")+1:]
+                        slash_idx = relative_path.index("/")
+                        folder_name = relative_path[slash_idx+1:]
+                        high_lvl_folder = relative_path[:slash_idx]
                     except ValueError as e:
-                        folder_name = relative_path
+                        # No slash in path - entire path is the high-level folder, no subfolders
+                        folder_name = ""
+                        high_lvl_folder = relative_path
 
                     # Add files to manfiest"
                     final_files_index = 1 if index_skip else 0
@@ -2433,7 +2449,11 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                         if file_file_name != basename(file_path):
                             # save the relative path, final name and local path of the file to be renamed
                             if folder_name not in list_of_files_to_rename:
-                                list_of_files_to_rename[folder_name] = {}
+                                list_of_files_to_rename[folder_name] = {"high_lvl_folder": high_lvl_folder}
+                            else:
+                                # Entry exists but may not have high_lvl_folder set
+                                if "high_lvl_folder" not in list_of_files_to_rename[folder_name]:
+                                    list_of_files_to_rename[folder_name]["high_lvl_folder"] = high_lvl_folder
                             if basename(file_path) not in list_of_files_to_rename[folder_name]:
                                 renamed_files_counter += 1
                                 list_of_files_to_rename[folder_name][basename(file_path)] = {
@@ -2519,7 +2539,67 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                     dataset_content = r.json()["children"]
 
             for key in list_of_files_to_rename:
-                # split the key up if there are multiple folders in the relative path
+                # Key structure:
+                # - key='' with high_lvl_folder set: Files directly in a high-level folder (e.g., primary/file.txt)
+                # - key='' with high_lvl_folder='': Files at actual dataset root (no folder)
+                # - key='subfolder' or 'sub1/sub2': Files in subfolders, high_lvl_folder derived from first part of key
+                if key == '':
+                    # Files directly in high-level folder OR at dataset root - use stored high_lvl_folder
+                    high_lvl_folder_name = list_of_files_to_rename[key].get("high_lvl_folder", "")
+                    subfolder_amount = 0
+                    
+                    if high_lvl_folder_name and high_lvl_folder_name in collection_ids:
+                        # Files directly in a high-level folder (e.g., primary/file.txt)
+                        high_lvl_folder_id = collection_ids[high_lvl_folder_name]["id"]
+                        list_of_files_to_rename[key]["id"] = high_lvl_folder_id
+                        
+                        # Get the high-level folder content
+                        limit = 100
+                        offset = 0
+                        folder_content = []
+                        while True:
+                            r = requests.get(f"{PENNSIEVE_URL}/packages/{high_lvl_folder_id}?limit={limit}&offset={offset}", headers=create_request_headers(ps))
+                            r.raise_for_status()
+                            page = r.json().get("children", [])
+                            folder_content.extend(page)
+                            if len(page) < limit:
+                                break
+                            offset += limit
+                        
+                        # Find file IDs
+                        for item in folder_content:
+                            if item["content"]["packageType"] != "Collection":
+                                file_name = item["content"]["name"]
+                                file_id = item["content"]["nodeId"]
+                                if file_name in list_of_files_to_rename[key]:
+                                    list_of_files_to_rename[key][file_name]["id"] = file_id
+                    else:
+                        # Files at actual dataset root (no high-level folder)
+                        list_of_files_to_rename[key]["id"] = dataset_id  # Use dataset_id for root-level lookup
+                        
+                        # Get dataset root content
+                        limit = 100
+                        offset = 0
+                        root_content = []
+                        while True:
+                            r = requests.get(f"{PENNSIEVE_URL}/datasets/{dataset_id}?limit={limit}&offset={offset}", headers=create_request_headers(ps))
+                            r.raise_for_status()
+                            page = r.json().get("children", [])
+                            root_content.extend(page)
+                            if len(page) < limit:
+                                break
+                            offset += limit
+                        
+                        # Find file IDs at root
+                        for item in root_content:
+                            if item["content"]["packageType"] != "Collection":
+                                file_name = item["content"]["name"]
+                                file_id = item["content"]["nodeId"]
+                                if file_name in list_of_files_to_rename[key]:
+                                    list_of_files_to_rename[key][file_name]["id"] = file_id
+                    continue
+                
+                # Non-empty key: derive high_lvl_folder from the key itself (first part before /)
                 relative_path = key.split("/")
                 high_lvl_folder_name = relative_path[0]
                 subfolder_level = 0
@@ -2564,16 +2644,13 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                         if "id" not in list_of_files_to_rename[key]:
                             # store the id of the folder to be used again in case the file id is not found (happens when not all files have been processed yet)
                             list_of_files_to_rename[key]["id"] = high_lvl_folder_id
-
-
+                        
                         for item in dataset_content:
                             if item["content"]["packageType"] != "Collection":
                                 file_name = item["content"]["name"]
                                 file_id = item["content"]["nodeId"]
 
                                 if file_name in list_of_files_to_rename[key]:
-                                    # name
-                                    # store the package id for now
                                     list_of_files_to_rename[key][file_name]["id"] = file_id
                     else:
                         # file is within a subfolder and we recursively iterate until we get to the last subfolder needed
@@ -2594,7 +2671,6 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                                             break
                                         offset += limit
                         
-
                             for item in dataset_content:
                                 if item["content"]["packageType"] == "Collection":
                                     folder_name = item["content"]["name"]
@@ -2656,9 +2732,18 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
             main_generated_dataset_size = 0
             main_total_generate_dataset_size = renamed_files_counter
             for relative_path in list_of_files_to_rename:
+                # Check if "id" exists for this path (may not exist if not yet set)
+                if "id" not in list_of_files_to_rename[relative_path]:
+                    logger.warning(f"No 'id' key found for relative_path '{relative_path}', skipping...")
+                    continue
+                
+                collection_id = list_of_files_to_rename[relative_path]["id"]
+                high_lvl_folder_name = list_of_files_to_rename[relative_path].get("high_lvl_folder", "")
+                # Check if this is a dataset root file (key='' and no high_lvl_folder)
+                is_dataset_root = (relative_path == '' and not high_lvl_folder_name)
+                
                 for file in list_of_files_to_rename[relative_path].keys():
-                    collection_id = list_of_files_to_rename[relative_path]["id"]
-                    if file == "id":
+                    if file == "id" or file == "high_lvl_folder":
                         continue
                     new_name = list_of_files_to_rename[relative_path][file]["final_file_name"]
                     file_id = list_of_files_to_rename[relative_path][file]["id"]
@@ -2675,34 +2760,38 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                     else:
                         # id was not found so keep trying to get the id until it is found
                         all_ids_found = False
-                        while not all_ids_found:
-                            collection_id = list_of_files_to_rename[relative_path]["id"]
-                            if file == "id":
-                                continue
+                        retry_attempts = 0
+                        max_retry_attempts = 60
+                        while not all_ids_found and retry_attempts < max_retry_attempts:
+                            retry_attempts += 1
+                            time.sleep(3)
 
-                            
                             limit = 100
                             offset = 0
                             dataset_content = []
 
-                            while True: 
-                                r = requests.put(f"{PENNSIEVE_URL}/packages/{collection_id}?updateStorage=true&limit={limit}&offset={offset}", headers=create_request_headers(ps))
+                            # Use correct endpoint: /datasets/ for root-level files, /packages/ for folder files
+                            while True:
+                                if is_dataset_root:
+                                    r = requests.get(f"{PENNSIEVE_URL}/datasets/{collection_id}?limit={limit}&offset={offset}", headers=create_request_headers(ps))
+                                else:
+                                    r = requests.get(f"{PENNSIEVE_URL}/packages/{collection_id}?limit={limit}&offset={offset}", headers=create_request_headers(ps))
                                 r.raise_for_status()
-                                page = r.json()["children"]
+                                page = r.json().get("children", [])
                                 dataset_content.extend(page)
-                                if len(dataset_content) < limit:
+                                if len(page) < limit:
                                     break
                                 offset += limit
                             
                             for item in dataset_content:
                                 if item["content"]["packageType"] != "Collection":
                                     file_name = item["content"]["name"]
-                                    file_id = item["content"]["nodeId"]
+                                    found_file_id = item["content"]["nodeId"]
 
                                     if file_name == file:
-                                        # id was found so make api call to rename with file file name
+                                        # id was found so make api call to rename with final file name
                                         try:
-                                            r = requests.put(f"{PENNSIEVE_URL}/packages/{file_id}", json={"name": new_name}, headers=create_request_headers(ps))
+                                            r = requests.put(f"{PENNSIEVE_URL}/packages/{found_file_id}?updateStorage=true", json={"name": new_name}, headers=create_request_headers(ps))
                                             r.raise_for_status()
                                         except Exception as e:
                                             if r.status_code == 500:
@@ -2710,6 +2799,9 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                                         main_generated_dataset_size += 1
                                         all_ids_found = True
                                         break
+                        
+                        if not all_ids_found:
+                            logger.warning(f"Could not find file ID for '{file}' after {max_retry_attempts} attempts")
 
 
         
