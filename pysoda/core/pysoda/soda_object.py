@@ -8,6 +8,22 @@ soda = {
   "ps-accoint-selected": {
 
   },
+  "guided-manifest-file-data": {
+    "headers": [
+      "filename",
+      "timestamp",
+      "description",
+      "file type",
+      "entity",
+      "data modality",
+      "also in dataset",
+      "also in dataset path",
+      "data dictionary path",
+      "entity is transitive",
+      "Additional Metadata"
+    ],
+    "data": []
+  },
   "dataset-validated": False, 
   "dataset-validation-errors": {},
   "dataset-structure": {
