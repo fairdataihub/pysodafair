@@ -1692,7 +1692,7 @@ total_metadata_files = 0
 total_manifest_files = 0
 
 
-def create_metadata_files_for_upload(soda, list_upload_metadata_files, existing_root_files=None, existing_file_option="skip"):
+def create_metadata_files_for_upload(soda, list_upload_metadata_files, existing_root_files=None, existing_file_option="skip", ps=None):
     """
     Creates metadata files (Excel and text) based on soda["dataset_metadata"] and appends them to the upload list.
     Updates global counters for total files and sizes.
@@ -1702,6 +1702,7 @@ def create_metadata_files_for_upload(soda, list_upload_metadata_files, existing_
         list_upload_metadata_files: List to append created metadata file paths to
         existing_root_files: Dict of files already at the root of the Pennsieve dataset (optional)
         existing_file_option: How to handle existing files - "skip", "replace", or "merge" (default: "skip")
+        ps: Pennsieve client object (required for delete operations when using "replace")
     """
     global main_total_generate_dataset_size
     global total_files
@@ -1713,15 +1714,42 @@ def create_metadata_files_for_upload(soda, list_upload_metadata_files, existing_
         logger.info("create_metadata_files_for_upload: No dataset_metadata found in soda, returning early")
         return
 
-    # Normalize existing files for lookup (case-insensitive filename)
-    existing_filenames = set()
+    # Normalize existing files for lookup (case-insensitive filename -> file info)
+    existing_files_map = {}
     if existing_root_files:
-        for file_key in existing_root_files:
-            existing_filenames.add(file_key.lower())
-        logger.info(f"create_metadata_files_for_upload: Found {len(existing_filenames)} existing files at dataset root: {list(existing_filenames)}")
+        for file_key, file_info in existing_root_files.items():
+            existing_files_map[file_key.lower()] = file_info
+        logger.info(f"create_metadata_files_for_upload: Found {len(existing_files_map)} existing files at dataset root: {list(existing_files_map.keys())}")
 
     files_created = 0
     files_skipped = 0
+    files_deleted = 0
+
+    def delete_existing_file(filename):
+        """Delete an existing file on Pennsieve if it exists and we have the ps client."""
+        nonlocal files_deleted
+        filename_lower = filename.lower()
+        if filename_lower not in existing_files_map:
+            return
+        
+        file_info = existing_files_map[filename_lower]
+        file_id = file_info.get("content", {}).get("id")
+        
+        if not file_id:
+            logger.warning(f"create_metadata_files_for_upload: Could not get file ID for '{filename}' to delete")
+            return
+        
+        if not ps:
+            logger.warning(f"create_metadata_files_for_upload: Cannot delete '{filename}' - ps client not provided")
+            return
+        
+        try:
+            r = requests.post(f"{PENNSIEVE_URL}/data/delete", headers=create_request_headers(ps), json={"things": [file_id]})
+            r.raise_for_status()
+            files_deleted += 1
+            logger.info(f"create_metadata_files_for_upload: Deleted existing '{filename}' (ID: {file_id}) on Pennsieve")
+        except Exception as e:
+            logger.error(f"create_metadata_files_for_upload: Failed to delete '{filename}': {e}")
 
     def should_upload_file(filename):
         """Check if a metadata file should be uploaded based on existing files and option."""
@@ -1730,25 +1758,24 @@ def create_metadata_files_for_upload(soda, list_upload_metadata_files, existing_
             return True  # No existing files to check against
         
         filename_lower = filename.lower()
-        file_exists = filename_lower in existing_filenames
+        file_exists = filename_lower in existing_files_map
         
         if file_exists and existing_file_option == "skip":
             logger.info(f"create_metadata_files_for_upload: Skipping '{filename}' - already exists on Pennsieve (if-existing-files='skip')")
             files_skipped += 1
             return False
-        elif file_exists and existing_file_option == "replace":
-            logger.info(f"create_metadata_files_for_upload: Will replace existing '{filename}' on Pennsieve (if-existing-files='replace')")
-            return True
-        elif file_exists:
-            logger.info(f"create_metadata_files_for_upload: '{filename}' exists, uploading anyway (if-existing-files='{existing_file_option}')")
-            return True
         
-        return True  # File doesn't exist
+        return True  # File doesn't exist or will be replaced/merged
 
     def add_metadata_file(filepath, filename):
         """Helper to register a created metadata file and update counters."""
         nonlocal files_created
         global main_total_generate_dataset_size, total_files, total_metadata_files
+        
+        # If replacing, delete the existing file first
+        if existing_file_option == "replace":
+            delete_existing_file(filename)
+        
         file_size = getsize(filepath)
         list_upload_metadata_files.append(filepath)
         main_total_generate_dataset_size += file_size
@@ -1789,7 +1816,7 @@ def create_metadata_files_for_upload(soda, list_upload_metadata_files, existing_
             text_metadata.create_text_file(soda, False, filepath, key)
             add_metadata_file(filepath, key)
 
-    logger.info(f"create_metadata_files_for_upload: Completed - {files_created} files created, {files_skipped} files skipped")
+    logger.info(f"create_metadata_files_for_upload: Completed - {files_created} files created, {files_skipped} files skipped, {files_deleted} files deleted")
 
 
 def ps_upload_to_dataset(soda, ps, ds, resume=False):
@@ -2280,7 +2307,8 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                         soda, 
                         list_upload_metadata_files,
                         existing_root_files=existing_root_files,
-                        existing_file_option=existing_file_option
+                        existing_file_option=existing_file_option,
+                        ps=ps
                     )
 
 
