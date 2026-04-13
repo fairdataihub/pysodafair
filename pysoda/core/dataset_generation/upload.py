@@ -2535,36 +2535,49 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
         if list_of_files_to_rename:
             renaming_files_flow = True
             logger.info("ps_create_new_dataset (optional) step 8 rename files")
+            logger.info("file-rename-fix-log: Entered rename step, list_of_files_to_rename keys: %s", list(list_of_files_to_rename.keys()))
             main_curate_progress_message = ("Preparing files to be renamed...")
             dataset_id = ds["content"]["id"]
             collection_ids = {}
             # gets the high level folders in the dataset
             r = requests.get(f"{PENNSIEVE_URL}/datasets/{dataset_id}", headers=create_request_headers(ps))
+            logger.info("file-rename-fix-log: Requested dataset content for dataset_id: %s", dataset_id)
             r.raise_for_status()
             dataset_content = r.json()["children"]
+            logger.info("file-rename-fix-log: dataset_content fetched: %s", dataset_content)
 
             if dataset_content == []:
+                logger.info("file-rename-fix-log: dataset_content is empty, entering wait loop")
                 while dataset_content == []:
-                    time.sleep(3)
+                    logger.info("file-rename-fix-log: Waiting for dataset_content to be populated...")
+                    time.sleep(5)
                     r = requests.get(f"{PENNSIEVE_URL}/datasets/{dataset_id}", headers=create_request_headers(ps))
                     r.raise_for_status()
                     dataset_content = r.json()["children"]
 
             collections_found = False
-            while not collections_found:
+            logger.info("file-rename-fix-log: Starting search for high-level folders in dataset_content")
+            collection_retry_count = 0
+            max_collection_retries = 2  # 1 immediate retry after 5s, then proceed after 10s if still none
+            while not collections_found and collection_retry_count < max_collection_retries:
+                logger.info("file-rename-fix-log: Looping through dataset_content to find collections. Current dataset_content: %s", dataset_content)
                 for item in dataset_content:
-                    # high lvl folders' ids are stored to be used to find the file IDS
                     if item["content"]["packageType"] == "Collection":
                         collections_found = True
                         collection_ids[item["content"]["name"]] = {"id": item["content"]["nodeId"]}
-
+                        logger.info("file-rename-fix-log: Found collection: %s with id: %s", item['content']['name'], item['content']['nodeId'])
 
                 if not collections_found:
-                    # No collections were found, metadata files were processed but not the high level folders
-                    time.sleep(3)
+                    collection_retry_count += 1
+                    logger.info("file-rename-fix-log: No collections found, retrying after 10s... (attempt %d)", collection_retry_count)
+                    time.sleep(10)
                     r = requests.get(f"{PENNSIEVE_URL}/datasets/{dataset_id}", headers=create_request_headers(ps))
                     r.raise_for_status()
                     dataset_content = r.json()["children"]
+                    logger.info("file-rename-fix-log: Retried dataset_content in collection search: %s", dataset_content)
+
+            if not collections_found:
+                logger.info("file-rename-fix-log: Still no collections found after %d retries, proceeding with root-level file renaming.", max_collection_retries)
 
             for key in list_of_files_to_rename:
                 # Key structure:
