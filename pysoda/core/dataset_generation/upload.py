@@ -495,22 +495,6 @@ def check_empty_files_folders(soda):
                         error_folders,
                     )
 
-        if "metadata-files" in soda.keys():
-            metadata_files = soda["metadata-files"]
-            for file_key in list(metadata_files.keys()):
-                file = metadata_files[file_key]
-                file_type = file.get("location")
-                if file_type == "local":
-                    file_path = file["path"]
-                    if isfile(file_path):
-                        file_size = getsize(file_path)
-                        if file_size == 0:
-                            del metadata_files[file_key]
-                            error_message = file_key + " (path: " + file_path + ")"
-                            error_files.append(error_message)
-            if not metadata_files:
-                del soda["metadata-files"]
-
         if len(error_files) > 0:
             error_message = [
                 "The following local file(s) is/are empty (0 kb) and will be ignored."
@@ -641,14 +625,6 @@ def check_json_size(jsonStructure):
         for keys, contents in folderSection.items():
             recursive_dataset_scan(contents)
 
-        if "metadata-files" in jsonStructure.keys():
-            metadata_files = jsonStructure["metadata-files"]
-            for file_key, file in metadata_files.items():
-                if file.get("location") == "local":
-                    metadata_path = file["path"]
-                    if isfile(metadata_path) and "new" in file["action"]:
-                        total_dataset_size += getsize(metadata_path)
-
         if "manifest-files" in jsonStructure.keys():
             manifest_files_structure = create_high_level_manifest_files(jsonStructure, manifest_folder_path)
             for key in manifest_files_structure.keys():
@@ -749,7 +725,7 @@ def generate_dataset_locally(soda):
 
     # 3. Add high-level metadata files in the list
     if "dataset_metadata" in soda.keys():
-        logger.info("generate_dataset_locally (optional) step 3 handling metadata-files")
+        logger.info("generate_dataset_locally (optional) step 3 handling dataset_metadata")
         metadata_files = soda["dataset_metadata"]
         # log the metadata files that will be created
         for file_key, _ in metadata_files.items():
@@ -2082,6 +2058,8 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                             desired_name = splitext(file_key)[0]
                             desired_name_extension = splitext(file_key)[1]
                             desired_name_with_extension = file_key
+                            
+                            # Skip file if skip option is set and the desired name already exists on Pennsieve
                             if existing_file_option == "skip" and desired_name_with_extension in my_bf_existing_files_name_with_extension:
                                 continue
 
@@ -2179,17 +2157,18 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
 
                 if list_local_files:
                     ds_name = soda["ps-dataset-selected"]["dataset-name"]
-                    list_upload_files.append(
-                        [
-                            list_local_files,
-                            ps_folder_children,
-                            list_projected_names,
-                            list_desired_names,
-                            list_final_names,
-                            my_tracking_folder,
-                            "/" if my_relative_path == ds_name else my_relative_path,
-                        ]
-                    )
+                    for file_path in list_local_files:
+                        list_upload_files.append(
+                            [
+                                list_local_files,
+                                ps_folder_children,
+                                list_projected_names,
+                                list_desired_names,
+                                list_final_names,
+                                my_tracking_folder,
+                                "/" if my_relative_path == ds_name else my_relative_path,
+                            ]
+                        )
 
                 for item in additional_upload_lists:
                     list_upload_files.append(item)
@@ -2544,7 +2523,6 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
             logger.info("file-rename-fix-log: Requested dataset content for dataset_id: %s", dataset_id)
             r.raise_for_status()
             dataset_content = r.json()["children"]
-            logger.info("file-rename-fix-log: dataset_content fetched: %s", dataset_content)
 
             if dataset_content == []:
                 logger.info("file-rename-fix-log: dataset_content is empty, entering wait loop")
@@ -2574,7 +2552,6 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                     r = requests.get(f"{PENNSIEVE_URL}/datasets/{dataset_id}", headers=create_request_headers(ps))
                     r.raise_for_status()
                     dataset_content = r.json()["children"]
-                    logger.info("file-rename-fix-log: Retried dataset_content in collection search: %s", dataset_content)
 
             if not collections_found:
                 logger.info("file-rename-fix-log: Still no collections found after %d retries, proceeding with root-level file renaming.", max_collection_retries)
@@ -3057,12 +3034,6 @@ def can_resume_prior_upload(resume_status):
     global ums 
     return resume_status and ums.df_mid_has_progress()
 
-def virtual_dataset_empty(soda):
-    return (
-        "dataset-structure" not in soda
-        and "metadata-files" not in soda
-        )
-
 def generate_options_set(soda):
     return "generate-dataset" in soda.keys()
 
@@ -3125,8 +3096,8 @@ def generate_dataset(soda, resume, ps):
         main_generate_destination = soda["generate-dataset"]["destination"]
 
         logger.info("generate_dataset generating_on_ps")
-        logger.info(f"  resume={resume}, can_resume={can_resume_prior_upload(resume)}")
-        logger.info(f"  uploading_to_existing={uploading_to_existing_ps_dataset(soda)}")
+        logger.info(f"resume={resume}, can_resume={can_resume_prior_upload(resume)}")
+        logger.info(f"uploading_to_existing={uploading_to_existing_ps_dataset(soda)}")
 
         if uploading_to_existing_ps_dataset(soda):
             logger.info("PATH: Existing PS Dataset")
