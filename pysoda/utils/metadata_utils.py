@@ -1,6 +1,6 @@
 import os.path
 import requests
-from .authentication import create_request_headers
+from .authentication import create_request_headers, get_access_token
 from ..constants import PENNSIEVE_URL
 
 
@@ -11,13 +11,13 @@ def column_check(x):
 
 # obtain Pennsieve S3 URL for an existing metadata file
 def returnFileURL(ps, item_id):
-    r = requests.get(f"{PENNSIEVE_URL}/packages/{item_id}/view", headers=create_request_headers(ps))
+    r = requests.get(f"{PENNSIEVE_URL}/packages/{item_id}/view", headers=create_request_headers(get_access_token()))
     r.raise_for_status()
 
     file_details = r.json()
     file_id = file_details[0]["content"]["id"]
     r = requests.get(
-        f"{PENNSIEVE_URL}/packages/{item_id}/files/{file_id}", headers=create_request_headers(ps)
+        f"{PENNSIEVE_URL}/packages/{item_id}/files/{file_id}", headers=create_request_headers(get_access_token())
     )
     r.raise_for_status()
 
