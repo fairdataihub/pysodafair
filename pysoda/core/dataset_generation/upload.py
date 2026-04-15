@@ -2061,6 +2061,7 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                             
                             # Skip file if skip option is set and the desired name already exists on Pennsieve
                             if existing_file_option == "skip" and desired_name_with_extension in my_bf_existing_files_name_with_extension:
+                                logger.info(f"list-upload-files log: File '{desired_name_with_extension}' already exists on Pennsieve and skip option is set - file will not be uploaded")
                                 continue
 
                             # check if initial filename exists on Pennsieve dataset and get the projected name of the file after upload
@@ -2124,6 +2125,7 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                                 or projected_name in list_final_names
                                 or final_name in list_projected_names
                             ):
+                                logger.info(f"list-upload-files log: File '{file_key}' has naming conflict - added to additional_upload_lists with projected_name: '{projected_name}', final_name: '{final_name}'")
                                 additional_upload_lists.append(
                                     [
                                         [file_path],
@@ -2136,6 +2138,7 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                                     ]
                                 )
                             else:
+                                logger.info(f"list-upload-files log: File '{file_key}' added to list_local_files with projected_name: '{projected_name}', final_name: '{final_name}'")
                                 list_local_files.append(file_path)
                                 list_projected_names.append(projected_name)
                                 list_desired_names.append(desired_name_with_extension)
