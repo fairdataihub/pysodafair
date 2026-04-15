@@ -2157,18 +2157,17 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
 
                 if list_local_files:
                     ds_name = soda["ps-dataset-selected"]["dataset-name"]
-                    for file_path in list_local_files:
-                        list_upload_files.append(
-                            [
-                                list_local_files,
-                                ps_folder_children,
-                                list_projected_names,
-                                list_desired_names,
-                                list_final_names,
-                                my_tracking_folder,
-                                "/" if my_relative_path == ds_name else my_relative_path,
-                            ]
-                        )
+                    list_upload_files.append(
+                        [
+                            list_local_files,
+                            ps_folder_children,
+                            list_projected_names,
+                            list_desired_names,
+                            list_final_names,
+                            my_tracking_folder,
+                            "/" if my_relative_path == ds_name else my_relative_path,
+                        ]
+                    )
 
                 for item in additional_upload_lists:
                     list_upload_files.append(item)
