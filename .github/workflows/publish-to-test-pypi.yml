@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - staging
+      - staged-upload
   workflow_dispatch:
 
 jobs:
