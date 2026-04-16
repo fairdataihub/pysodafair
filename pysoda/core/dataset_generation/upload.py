@@ -1999,7 +1999,8 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
             ps_folder_children = my_tracking_folder["children"] #ds (dataset)
 
 
-
+            # Recursively go through the dataset structure and the Pennsieve dataset to find
+            # any files that need to be uploaded, replaced, or skipped based on the existing_file_option.
             if "folders" in my_folder.keys():
                 for folder_key, folder in my_folder["folders"].items():
                     relative_path = generate_relative_path(my_relative_path, folder_key)
@@ -2024,12 +2025,23 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                     # if local then we are either adding a new file to an existing/new dataset or replacing a file in an existing dataset
                     if file.get("location") == "local":
                         file_path = file["path"]
-                        if isfile(file_path) and existing_file_option == "replace" and file_key in ps_folder_children["files"]:
-                            my_file = ps_folder_children["files"][file_key]
-                            # delete the package ( aka file ) from the dataset 
-                            r = requests.post(f"{PENNSIEVE_URL}/data/delete", headers=create_request_headers(ps), json={"things": [f"{my_file['content']['id']}"]})
-                            r.raise_for_status()
-                            del ps_folder_children["files"][file_key]
+                        if isfile(file_path):
+                            if ("renamed" in file.get("action", [])):
+                                original_file_key = file.get("original-name", file_key)
+                                if original_file_key in ps_folder_children["files"]:
+                                    logger.info(f"list-upload-files log: Renaming file: Found original file '{original_file_key}' on Pennsieve (was renamed from '{file_key}'). Deleting it because it must be re-uploaded with the new name.")
+                                    my_file = ps_folder_children["files"][original_file_key]
+                                    # delete the package ( aka file ) from the dataset 
+                                    r = requests.post(f"{PENNSIEVE_URL}/data/delete", headers=create_request_headers(ps), json={"things": [f"{my_file['content']['id']}"]})
+                                    r.raise_for_status()
+                                    del ps_folder_children["files"][original_file_key]
+                            if file_key in ps_folder_children["files"] and existing_file_option == "replace":
+                                logger.info(f"list-upload-files log: Found file '{file_key}' on Pennsieve for deletion")
+                                my_file = ps_folder_children["files"][file_key]
+                                # delete the package ( aka file ) from the dataset 
+                                r = requests.post(f"{PENNSIEVE_URL}/data/delete", headers=create_request_headers(ps), json={"things": [f"{my_file['content']['id']}"]})
+                                r.raise_for_status()
+                                del ps_folder_children["files"][file_key]
 
 
                 # create list of files to be uploaded with projected and desired names saved
@@ -2052,108 +2064,39 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                     if file.get("location") == "local":
                         file_path = file["path"]
                         if isfile(file_path):
-                            initial_name = splitext(basename(file_path))[0]
-                            initial_extension = splitext(basename(file_path))[1]
-                            initial_name_with_extension = basename(file_path)
-                            desired_name = splitext(file_key)[0]
-                            desired_name_extension = splitext(file_key)[1]
-                            desired_name_with_extension = file_key
+                            file_extension = file.get("extension", splitext(file_path)[1])
+
+                            initial_name = None
+                            initial_name_with_extension = None
+                            desired_name_with_extension = None
+                            if ("renamed" in file.get("action", [])):
+                                # Remove the extension from the original name using file_extension
+                                initial_name_with_extension = file.get("original-name", file_key)
+                                if initial_name_with_extension.endswith(file_extension):
+                                    initial_name = initial_name_with_extension[: -len(file_extension)]
+                                else:
+                                    initial_name = splitext(initial_name_with_extension)[0]
+                                desired_name_with_extension = file_key
+                            else:
+                                #logic for non-renamed files
+                                initial_name = file_key[: -len(file_extension)] if file_key.endswith(file_extension) else splitext(basename(file_path))[0]
+                                initial_name_with_extension = basename(file_path)
+                                desired_name_with_extension = file_key
                             
                             # Skip file if skip option is set and the desired name already exists on Pennsieve
-                            if existing_file_option == "skip" and desired_name_with_extension in my_bf_existing_files_name_with_extension:
+                            if existing_file_option != "replace" and desired_name_with_extension in my_bf_existing_files_name_with_extension:
                                 logger.info(f"list-upload-files log: File '{desired_name_with_extension}' already exists on Pennsieve and skip option is set - file will not be uploaded")
                                 continue
 
-                            # check if initial filename exists on Pennsieve dataset and get the projected name of the file after upload
-                            # used when a local file has a name that matches an existing name on Pennsieve
-                            count_done = 0
-                            count_exist = 0
-                            projected_name = initial_name_with_extension
-                            while count_done == 0:
-                                if (
-                                    projected_name
-                                    in my_bf_existing_files_name_with_extension
-                                ):
-                                    count_exist += 1
-                                    projected_name = (
-                                        initial_name
-                                        + " ("
-                                        + str(count_exist)
-                                        + ")"
-                                        + initial_extension
-                                    )
-                                else:
-                                    count_done = 1
 
-                            # expected final name
-                            count_done = 0
-                            final_name = desired_name_with_extension
-                            if output := get_base_file_name(desired_name):
-                                base_name = output[0]
-                                count_exist = output[1]
-                                while count_done == 0:
-                                    if final_name in my_bf_existing_files_name:
-                                        count_exist += 1
-                                        final_name = (
-                                            base_name
-                                            + "("
-                                            + str(count_exist)
-                                            + ")"
-                                            + desired_name_extension
-                                        )
-                                    else:
-                                        count_done = 1
-                            else:
-                                count_exist = 0
-                                while count_done == 0:
-                                    if final_name in my_bf_existing_files_name:
-                                        count_exist += 1
-                                        final_name = (
-                                            desired_name
-                                            + " ("
-                                            + str(count_exist)
-                                            + ")"
-                                            + desired_name_extension
-                                        )
-                                    else:
-                                        count_done = 1
+                            logger.info(f"list-upload-files log: File '{file_key}' added to list_local_files with projected_name: '{initial_name_with_extension}', final_name: '{desired_name_with_extension}'")
+                            list_local_files.append(file_path)
+                            list_projected_names.append(initial_name_with_extension)
+                            list_desired_names.append(desired_name_with_extension)
+                            list_final_names.append(desired_name_with_extension)
+                            list_initial_names.append(initial_name)
 
-                            # save in list accordingly
-                            if (
-                                initial_name in list_initial_names
-                                or initial_name in list_final_names
-                                or projected_name in list_final_names
-                                or final_name in list_projected_names
-                            ):
-                                logger.info(f"list-upload-files log: File '{file_key}' has naming conflict - added to additional_upload_lists with projected_name: '{projected_name}', final_name: '{final_name}'")
-                                additional_upload_lists.append(
-                                    [
-                                        [file_path],
-                                        ps_folder_children,
-                                        [projected_name],
-                                        [desired_name],
-                                        [final_name],
-                                        my_tracking_folder,
-                                        my_relative_path,
-                                    ]
-                                )
-                            else:
-                                logger.info(f"list-upload-files log: File '{file_key}' added to list_local_files with projected_name: '{projected_name}', final_name: '{final_name}'")
-                                list_local_files.append(file_path)
-                                list_projected_names.append(projected_name)
-                                list_desired_names.append(desired_name_with_extension)
-                                list_final_names.append(final_name)
-                                list_initial_names.append(initial_name)
-
-                            my_bf_existing_files_name.append(final_name)
-                            if initial_extension in ps_recognized_file_extensions:
-                                my_bf_existing_files_name_with_extension.append(
-                                    final_name
-                                )
-                            else:
-                                my_bf_existing_files_name_with_extension.append(
-                                    final_name + initial_extension
-                                )
+                            my_bf_existing_files_name_with_extension.append(desired_name_with_extension)
 
                             # add to projected dataset size to be generated
                             main_total_generate_dataset_size += getsize(file_path)
@@ -2291,38 +2234,6 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                         existing_file_option=existing_file_option,
                         ps=ps
                     )
-
-
-                # 4. Prepare and add manifest files to a list
-                if "dataset_metadata" in soda.keys() and "manifest_files" in soda["dataset_metadata"].keys():
-                    logger.info("ps_create_new_dataset (optional) step 4 create manifest list")
-                    # create local folder to save manifest files temporarly (delete any existing one first)
-                    # TODO: SDS 3 create manifests if not skipping and delete file on Pennsieve if it exists
-                    if "auto-generated" in soda["manifest-files"]:
-                        if soda["manifest-files"]["auto-generated"] == True:
-                            manifest_files_structure = (
-                                get_auto_generated_manifest_files(soda)
-                            )
-
-                        # add manifest files to list after deleting existing ones
-                        for key in manifest_files_structure.keys():
-                            manifestpath = manifest_files_structure[key]
-                            folder = tracking_json_structure["children"]["folders"][key]
-
-                            # delete existing manifest files
-                            for child_key in folder["children"]["files"]:
-                                file_name_no_ext = os.path.splitext(folder['children']['files'][child_key]['content']['name'])[0]
-                                if file_name_no_ext.lower() == "manifest":
-                                    # delete the manifest file from the given folder 
-                                    r = requests.post(f"{PENNSIEVE_URL}/data/delete", json={"things": [folder['children']['files'][child_key]['content']['id']]}, headers=create_request_headers(get_access_token()))
-                                    r.raise_for_status()
-
-                            # upload new manifest files
-                            # the number of files to upload and the total also determines when the upload subscribers should stop listening to the dataset upload progress ( when files uploaded == total files stop listening )
-                            list_upload_manifest_files.append([manifestpath, key])
-                            total_files += 1
-                            total_manifest_files += 1
-                            main_total_generate_dataset_size += getsize(manifestpath)
 
 
         # 2. Count how many files will be uploaded to inform frontend - do not count if we are resuming a previous upload that has made progress
@@ -2540,7 +2451,6 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
             collection_retry_count = 0
             max_collection_retries = 2  # 1 immediate retry after 5s, then proceed after 10s if still none
             while not collections_found and collection_retry_count < max_collection_retries:
-                logger.info("file-rename-fix-log: Looping through dataset_content to find collections. Current dataset_content: %s", dataset_content)
                 for item in dataset_content:
                     if item["content"]["packageType"] == "Collection":
                         collections_found = True
