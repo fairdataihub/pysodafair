@@ -136,11 +136,3 @@ class UploadManifestSession:
                     total_bytes_uploaded += int(bytes_per_file_dict.get(file_path, 0))
 
         return total_bytes_uploaded
-
-    
-
-
-
-
-# ums = UploadManifestSession()
-# ums.df_mid_has_progress()

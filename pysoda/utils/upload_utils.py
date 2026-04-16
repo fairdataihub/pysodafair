@@ -22,7 +22,7 @@ def uploading_with_ps_account(soda_json_structure):
     return "ps-account-selected" in soda_json_structure
 
 def uploading_to_existing_ps_dataset(soda_json_structure):
-    return "ps-dataset-selected" in soda_json_structure
+    return (soda_json_structure.get("starting-point") is not None and soda_json_structure["starting-point"].get("origin") == "ps")
 
 def can_resume_prior_upload(resume_status):
     global ums 
@@ -31,7 +31,7 @@ def can_resume_prior_upload(resume_status):
 def virtual_dataset_empty(soda_json_structure):
     return (
         "dataset-structure" not in soda_json_structure
-        and "metadata-files" not in soda_json_structure
+        and "dataset_metadata" not in soda_json_structure
         )
 
 def get_dataset_id(dataset_name_or_id):
