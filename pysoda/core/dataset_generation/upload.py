@@ -1397,7 +1397,7 @@ def get_base_file_name(file_name):
     return output
 
 
-def ps_update_existing_dataset(soda, ds, ps, resume):
+def clean_existing_ps_dataset(soda, ds):
     global logger
 
     logger.info("Starting ps_update_existing_dataset")
@@ -1414,7 +1414,7 @@ def ps_update_existing_dataset(soda, ds, ps, resume):
                 if "deleted" in folder["files"][item]["action"]:
                     file_path = folder["files"][item]["path"]
                     # remove the file from the dataset
-                    r = requests.post(f"{PENNSIEVE_URL}/data/delete", headers=create_request_headers(ps), json={"things": [file_path]})
+                    r = requests.post(f"{PENNSIEVE_URL}/data/delete", headers=create_request_headers(get_access_token()), json={"things": [file_path]})
                     r.raise_for_status()
                     # remove the file from the soda json structure
                     del folder["files"][item]
@@ -1456,11 +1456,11 @@ def ps_update_existing_dataset(soda, ds, ps, resume):
 
         if folder not in current_folder_structure["folders"]:
             if index == 0:
-                r = requests.post(f"{PENNSIEVE_URL}/packages", json={"name": folder, "parent": f"{current_folder_structure['path']}", "packageType": "collection", "dataset": ds['content']['id']},  headers=create_request_headers(ps))
+                r = requests.post(f"{PENNSIEVE_URL}/packages", json={"name": folder, "parent": f"{current_folder_structure['path']}", "packageType": "collection", "dataset": ds['content']['id']},  headers=create_request_headers(get_access_token()))
                 r.raise_for_status()
                 new_folder = r.json()
             else:
-                r = requests.post(f"{PENNSIEVE_URL}/packages", json={"name": folder, "parent": f"{current_folder_structure['path']}", "packageType": "collection", "dataset": ds['content']['id']},  headers=create_request_headers(ps))
+                r = requests.post(f"{PENNSIEVE_URL}/packages", json={"name": folder, "parent": f"{current_folder_structure['path']}", "packageType": "collection", "dataset": ds['content']['id']},  headers=create_request_headers(get_access_token()))
                 r.raise_for_status()
                 new_folder = r.json()
             
@@ -1475,7 +1475,7 @@ def ps_update_existing_dataset(soda, ds, ps, resume):
         index += 1
         # check if path exists for folder, if not then folder has not been created on Pennsieve yet, so create it and add it to the path key
         if "path" not in current_folder_structure["folders"][folder].keys() or current_folder_structure["folders"][folder]["location"] != "ps":
-            r = requests.post(f"{PENNSIEVE_URL}/packages", headers=create_request_headers(ps), json=build_create_folder_request(folder, current_folder_structure["path"], ds['content']['id']))
+            r = requests.post(f"{PENNSIEVE_URL}/packages", headers=create_request_headers(get_access_token()), json=build_create_folder_request(folder, current_folder_structure["path"], ds['content']['id']))
             r.raise_for_status()
             new_folder_id = r.json()["content"]["id"]
             current_folder_structure["folders"][folder]["path"] = new_folder_id
@@ -1497,7 +1497,7 @@ def ps_update_existing_dataset(soda, ds, ps, resume):
                     and folder["files"][item]["location"] == "ps"
                 ):
                     # rename the file on Pennsieve
-                    r = requests.put(f"{PENNSIEVE_URL}/packages/{folder['files'][item]['path']}?updateStorage=true", json={"name": item}, headers=create_request_headers(ps))
+                    r = requests.put(f"{PENNSIEVE_URL}/packages/{folder['files'][item]['path']}?updateStorage=true", json={"name": item}, headers=create_request_headers(get_access_token()))
                     r.raise_for_status()
 
         for item in list(folder["folders"]):
@@ -1516,12 +1516,12 @@ def ps_update_existing_dataset(soda, ds, ps, resume):
                 if "moved" in child.get("action", []):
                     file_path = child["path"]
                     # remove the file from the dataset
-                    r = requests.post(f"{PENNSIEVE_URL}/data/delete", headers=create_request_headers(ps), json={"things": [file_path]})
+                    r = requests.post(f"{PENNSIEVE_URL}/data/delete", headers=create_request_headers(get_access_token()), json={"things": [file_path]})
                     r.raise_for_status()
                 if "deleted" in child.get("action", []):
                     file_path = child["path"]
                     # remove the file from the dataset
-                    r = requests.post(f"{PENNSIEVE_URL}/data/delete", headers=create_request_headers(ps), json={"things": [file_path]})
+                    r = requests.post(f"{PENNSIEVE_URL}/data/delete", headers=create_request_headers(get_access_token()), json={"things": [file_path]})
                     r.raise_for_status()
                     del folder["folders"][item]
                 else:
@@ -1540,7 +1540,7 @@ def ps_update_existing_dataset(soda, ds, ps, resume):
                 and mode in child["action"]
             ):
                 folder_id = child["path"]
-                r = requests.put(f"{PENNSIEVE_URL}/packages/{folder_id}?updateStorage=true", headers=create_request_headers(ps), json={"name": item})
+                r = requests.put(f"{PENNSIEVE_URL}/packages/{folder_id}?updateStorage=true", headers=create_request_headers(get_access_token()), json={"name": item})
                 r.raise_for_status()
             recursive_folder_rename(child, mode)
 
@@ -1591,8 +1591,7 @@ def ps_update_existing_dataset(soda, ds, ps, resume):
             soda["manifest-files"] = {"destination": "ps"}
 
     end = timer()
-    logger.info(f"Time for ps_update_existing_dataset function: {timedelta(seconds=end - start)}")
-    ps_upload_to_dataset(soda, ps, ds, resume)
+    logger.info(f"Time for clean_existing_ps_dataset: {timedelta(seconds=end - start)}")
 
 
 def get_origin_manifest_id(dataset_id):
@@ -1795,192 +1794,186 @@ def create_metadata_files_for_upload(soda, list_upload_metadata_files, existing_
     logger.info(f"create_metadata_files_for_upload: Completed - {files_created} files created, {files_skipped} files skipped, {files_deleted} files deleted")
 
 
-def ps_upload_to_dataset(soda, ps, ds, resume=False):
-    global logger
-
-    # Progress tracking variables that are used for the frontend progress bar.
-    global main_curate_progress_message
-    global main_total_generate_dataset_size
-    global main_generated_dataset_size
-    global start_generate
-    global main_initial_bfdataset_size
-    global main_curation_uploaded_files
-    global uploaded_folder_counter
-    global current_size_of_uploaded_files
-    global total_files
-    global total_bytes_uploaded # current number of bytes uploaded to Pennsieve in the current session
-    global client
-    global files_uploaded
-    global total_dataset_files
-    global current_files_in_subscriber_session
-    global renaming_files_flow
-    global bytes_uploaded_per_file
-    global total_bytes_uploaded_per_file
-    global bytes_file_path_dict
-    global elapsed_time
-    global manifest_id
-    global origin_manifest_id
-    global main_curate_status
-    global list_of_files_to_rename
-    global renamed_files_counter
-    global total_metadata_files
-    global total_manifest_files
 
 
-
+def create_upload_information_new(soda, ps, relative_path):
+    list_upload_files = []
+    list_upload_metadata_files = []
+    main_total_generate_dataset_size = 0
     total_files = 0
-    total_dataset_files = 0
     total_metadata_files = 0
-    total_manifest_files = 0
-    main_curation_uploaded_files = 0
-    total_bytes_uploaded = {"value": 0}
-    total_bytes_uploaded_per_file = {}
-    files_uploaded = 0
-    renamed_files_counter = 0
-    
+    bytes_file_path_dict = {}
 
-    uploaded_folder_counter = 0
-    current_size_of_uploaded_files = 0
-    start = timer()
-    try:
+    global logger 
+    logger.info("Create new manifest - helper function creating upload information new")
 
+    def recursive_dataset_scan_for_new_upload(dataset_structure, list_upload_files, my_relative_path):
+        """
+        This function recursively gathers the files and folders in the dataset that will be uploaded to Pennsieve.
+        It assumes the dataset is new based on the generate_option value and will spend less time comparing what is on Pennsieve.
+        It will gather all the relative paths for the files and folders to pass along to the Pennsieve agent.
+        Input:
+        dataset_structure,
+        my_relative_path
 
-        def recursive_dataset_scan_for_new_upload(dataset_structure, list_upload_files, my_relative_path):
-            """
-            This function recursively gathers the files and folders in the dataset that will be uploaded to Pennsieve.
-            It assumes the dataset is new based on the generate_option value and will spend less time comparing what is on Pennsieve.
-            It will gather all the relative paths for the files and folders to pass along to the Pennsieve agent.
-            Input:
-            dataset_structure,
-            my_relative_path
+        Output:
+        two lists in one tuple, the first list will have all the local file paths that will be uploaded to Pennsieve
+        The second list will have the relative files paths according to the dataset structure.
+        If the folder does not existing yet on Pennsieve the agent will create it.
+        """
+        nonlocal main_total_generate_dataset_size
+        nonlocal bytes_file_path_dict
+        # First loop will take place in the root of the dataset
+        if "folders" in dataset_structure.keys():
+            for folder_key, folder in dataset_structure["folders"].items():
+                relative_path = generate_relative_path(my_relative_path, folder_key)
+                list_upload_files = recursive_dataset_scan_for_new_upload(folder, list_upload_files, relative_path)
+        if "files" in dataset_structure.keys():
+            list_local_files = []
+            list_projected_names = []
+            list_desired_names = []
+            list_final_names = []
 
-            Output:
-            two lists in one tuple, the first list will have all the local file paths that will be uploaded to Pennsieve
-            The second list will have the relative files paths according to the dataset structure.
-            If the folder does not existing yet on Pennsieve the agent will create it.
-            """
-            global main_total_generate_dataset_size
-            global bytes_file_path_dict
-            # First loop will take place in the root of the dataset
-            if "folders" in dataset_structure.keys():
-                for folder_key, folder in dataset_structure["folders"].items():
-                    relative_path = generate_relative_path(my_relative_path, folder_key)
-                    list_upload_files = recursive_dataset_scan_for_new_upload(folder, list_upload_files, relative_path)
-            if "files" in dataset_structure.keys():
-                list_local_files = []
-                list_projected_names = []
-                list_desired_names = []
-                list_final_names = []
-
-                list_initial_names = []
-                for file_key, file in dataset_structure["files"].items():
-                    # relative_path = generate_relative_path(my_relative_path, file_key)
-                    file_path = file["path"]
-                    if isfile(file_path) and file.get("location") == "local":
-                        projected_name = splitext(basename(file_path))[0]
-                        projected_name_w_extension = basename(file_path)
-                        desired_name = splitext(file_key)[0]
-                        desired_name_with_extension = file_key
+            list_initial_names = []
+            for file_key, file in dataset_structure["files"].items():
+                # relative_path = generate_relative_path(my_relative_path, file_key)
+                file_path = file["path"]
+                if isfile(file_path) and file.get("location") == "local":
+                    projected_name = splitext(basename(file_path))[0]
+                    projected_name_w_extension = basename(file_path)
+                    desired_name = splitext(file_key)[0]
+                    desired_name_with_extension = file_key
 
 
-                        if projected_name != desired_name:
-                            list_initial_names.append(projected_name)
-                            list_local_files.append(file_path)
-                            list_projected_names.append(projected_name_w_extension)
-                            list_desired_names.append(desired_name_with_extension)
-                            list_final_names.append(desired_name)
-                        else:
-                            list_local_files.append(file_path)
-                            list_projected_names.append(projected_name_w_extension)
-                            list_desired_names.append(desired_name_with_extension)
-                            list_final_names.append(desired_name)
-                            list_initial_names.append(projected_name)
+                    if projected_name != desired_name:
+                        list_initial_names.append(projected_name)
+                        list_local_files.append(file_path)
+                        list_projected_names.append(projected_name_w_extension)
+                        list_desired_names.append(desired_name_with_extension)
+                        list_final_names.append(desired_name)
+                    else:
+                        list_local_files.append(file_path)
+                        list_projected_names.append(projected_name_w_extension)
+                        list_desired_names.append(desired_name_with_extension)
+                        list_final_names.append(desired_name)
+                        list_initial_names.append(projected_name)
 
-                        file_size = getsize(file_path)
-                        main_total_generate_dataset_size += file_size
-                        bytes_file_path_dict[file_path] = file_size
+                    file_size = getsize(file_path)
+                    main_total_generate_dataset_size += file_size
+                    bytes_file_path_dict[file_path] = file_size
 
-                if list_local_files:
-                    list_upload_files.append([
-                        list_local_files,
-                        list_projected_names,
-                        list_desired_names,
-                        list_final_names,
-                        "/" if my_relative_path == soda["generate-dataset"]["dataset-name"] else my_relative_path,
-                    ])
+            if list_local_files:
+                list_upload_files.append([
+                    list_local_files,
+                    list_projected_names,
+                    list_desired_names,
+                    list_final_names,
+                    "/" if my_relative_path == soda["generate-dataset"]["dataset-name"] else my_relative_path,
+                ])
 
 
-            return list_upload_files
+        return list_upload_files
 
-        # See how to create folders with the Pennsieve agent
-        def recursive_create_folder_for_ps(
-            my_folder, my_tracking_folder, existing_folder_option
-        ):
-            """
-            Creates a folder on Pennsieve for each folder in the dataset structure if they aren't already present in the dataset.
-            Input:
-                my_folder: The dataset structure to be created on Pennsieve. Pass in the soda json object to start. 
-                my_tracking_folder: Tracks what folders have been created on Pennsieve thus far. Starts as an empty dictionary.
-                existing_folder_option: Dictates whether to merge, duplicate, replace, or skip existing folders.
-            """
-            # Check if the current folder has any subfolders that already exist on Pennsieve. Important step to appropriately handle replacing and merging folders.
-            if len(my_tracking_folder["children"]["folders"]) == 0 and my_tracking_folder["content"]["id"].find("N:dataset") == -1:
-                limit = 100
-                offset = 0
-                ps_folder = {}
-                ps_folder_children = []
-                while True: 
-                    r = requests.get(f"{PENNSIEVE_URL}/packages/{my_tracking_folder['content']['id']}?limit={limit}&offset={offset}", headers=create_request_headers(ps), json={"include": "files"})
-                    r.raise_for_status()
-                    ps_folder = r.json()
-                    page = ps_folder["children"]
-                    ps_folder_children.extend(page)
-                    if len(page) < limit:
-                        break
-                    offset += limit
-                    time.sleep(1)
-                    
-                ps_folder["children"] = ps_folder_children
-                normalize_tracking_folder(ps_folder)
-                my_tracking_folder["children"] = ps_folder["children"]
 
-            # create/replace/skip folder
-            if "folders" in my_folder.keys():
-                for folder_key, folder in my_folder["folders"].items():
-                    if existing_folder_option == "merge":
-                        if folder_key in my_tracking_folder["children"]["folders"]:
-                            ps_folder = my_tracking_folder["children"]["folders"][folder_key]
-                            normalize_tracking_folder(ps_folder)
-                        else:
-                            # We are merging but this is a new folder - not one that already exists in the current dataset - so we create it.
-                            r = requests.post(f"{PENNSIEVE_URL}/packages", headers=create_request_headers(ps), json=build_create_folder_request(folder_key, my_tracking_folder['content']['id'], ds['content']['id']))
-                            r.raise_for_status()
-                            ps_folder = r.json()
-                            normalize_tracking_folder(ps_folder)
+    # we can assume no files/folders exist in the dataset since the generate option is new and starting point is also new
+    # therefore, we can assume the dataset structure is the same as the tracking structure
 
-                    elif existing_folder_option == "replace":
-                        # if the folder exists on Pennsieve remove it
-                        if folder_key in my_tracking_folder["children"]["folders"]:
-                            ps_folder = my_tracking_folder["children"]["folders"][folder_key]
+    list_upload_files = recursive_dataset_scan_for_new_upload(soda["dataset-structure"], list_upload_files, relative_path)
 
-                            r = requests.post(f"{PENNSIEVE_URL}/data/delete", headers=create_request_headers(ps), json={"things": [ps_folder["content"]["id"]]})
-                            r.raise_for_status()
+    if len(list_upload_files) <= 0:
+        logger.info("Create new manifest - helper function failed to add new files to upload files") 
 
-                            # remove from ps_folder 
-                            del my_tracking_folder["children"]["folders"][folder_key]
+    create_metadata_files_for_upload(soda, list_upload_metadata_files, existing_file_option=False, existing_root_files=False, ps=ps )
 
-                        r = requests.post(f"{PENNSIEVE_URL}/packages", headers=create_request_headers(ps), json=build_create_folder_request(folder_key, my_tracking_folder['content']['id'], ds['content']['id']))
+    return {
+        "list_upload_files": list_upload_files,
+        "list_upload_metadata_files": list_upload_metadata_files,
+        "total_files": total_files,
+        "total_metadata_files": total_metadata_files,
+        "main_total_generate_dataset_size": main_total_generate_dataset_size,
+        "bytes_file_path_dict": bytes_file_path_dict
+    }
+
+
+
+    # Helper function
+
+
+def create_upload_information_existing(soda, dataset_structure, ds, ps, relative_path):
+
+    global main_curate_progress_message
+    global main_curate_status
+
+
+    # See how to create folders with the Pennsieve agent
+    def recursive_create_folder_for_ps(
+        my_folder, my_tracking_folder, existing_folder_option
+    ):
+        """
+        Creates a folder on Pennsieve for each folder in the dataset structure if they aren't already present in the dataset.
+        Input:
+            my_folder: The dataset structure to be created on Pennsieve. Pass in the soda json object to start. 
+            my_tracking_folder: Tracks what folders have been created on Pennsieve thus far. Starts as an empty dictionary.
+            existing_folder_option: Dictates whether to merge, duplicate, replace, or skip existing folders.
+        """
+        # Check if the current folder has any subfolders that already exist on Pennsieve. Important step to appropriately handle replacing and merging folders.
+        if len(my_tracking_folder["children"]["folders"]) == 0 and my_tracking_folder["content"]["id"].find("N:dataset") == -1:
+            limit = 100
+            offset = 0
+            ps_folder = {}
+            ps_folder_children = []
+            while True: 
+                r = requests.get(f"{PENNSIEVE_URL}/packages/{my_tracking_folder['content']['id']}?limit={limit}&offset={offset}", headers=create_request_headers(get_access_token()), json={"include": "files"})
+                r.raise_for_status()
+                ps_folder = r.json()
+                page = ps_folder["children"]
+                ps_folder_children.extend(page)
+                if len(page) < limit:
+                    break
+                offset += limit
+                time.sleep(1)
+                
+            ps_folder["children"] = ps_folder_children
+            normalize_tracking_folder(ps_folder)
+            my_tracking_folder["children"] = ps_folder["children"]
+
+        # create/replace/skip folder
+        if "folders" in my_folder.keys():
+            for folder_key, folder in my_folder["folders"].items():
+                if existing_folder_option == "merge":
+                    if folder_key in my_tracking_folder["children"]["folders"]:
+                        ps_folder = my_tracking_folder["children"]["folders"][folder_key]
+                        normalize_tracking_folder(ps_folder)
+                    else:
+                        # We are merging but this is a new folder - not one that already exists in the current dataset - so we create it.
+                        r = requests.post(f"{PENNSIEVE_URL}/packages", headers=create_request_headers(get_access_token()), json=build_create_folder_request(folder_key, my_tracking_folder['content']['id'], ds['content']['id']))
                         r.raise_for_status()
                         ps_folder = r.json()
                         normalize_tracking_folder(ps_folder)
 
-                    my_tracking_folder["children"]["folders"][folder_key] = ps_folder
-                    tracking_folder = my_tracking_folder["children"]["folders"][folder_key] # get the folder we just added to the tracking folder
-                    recursive_create_folder_for_ps(
-                        folder, tracking_folder, existing_folder_option
-                    )
+                elif existing_folder_option == "replace":
+                    # if the folder exists on Pennsieve remove it
+                    if folder_key in my_tracking_folder["children"]["folders"]:
+                        ps_folder = my_tracking_folder["children"]["folders"][folder_key]
 
-        def recursive_dataset_scan_for_ps(
+                        r = requests.post(f"{PENNSIEVE_URL}/data/delete", headers=create_request_headers(get_access_token()), json={"things": [ps_folder["content"]["id"]]})
+                        r.raise_for_status()
+
+                        # remove from ps_folder 
+                        del my_tracking_folder["children"]["folders"][folder_key]
+
+                    r = requests.post(f"{PENNSIEVE_URL}/packages", headers=create_request_headers(get_access_token()), json=build_create_folder_request(folder_key, my_tracking_folder['content']['id'], ds['content']['id']))
+                    r.raise_for_status()
+                    ps_folder = r.json()
+                    normalize_tracking_folder(ps_folder)
+
+                my_tracking_folder["children"]["folders"][folder_key] = ps_folder
+                tracking_folder = my_tracking_folder["children"]["folders"][folder_key] # get the folder we just added to the tracking folder
+                recursive_create_folder_for_ps(
+                    folder, tracking_folder, existing_folder_option
+                )
+
+    def recursive_dataset_scan_for_ps(
             my_folder,
             my_tracking_folder,
             existing_file_option,
@@ -1991,7 +1984,7 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                 Delete files that are marked to be replaced in the dataset. Create a list of files to upload to Pennsieve.
             """
 
-            global main_total_generate_dataset_size
+            nonlocal main_total_generate_dataset_size
             global logger
 
 
@@ -2032,14 +2025,14 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                                     logger.info(f"list-upload-files log: Renaming file: Found original file '{original_file_key}' on Pennsieve (was renamed from '{file_key}'). Deleting it because it must be re-uploaded with the new name.")
                                     my_file = ps_folder_children["files"][original_file_key]
                                     # delete the package ( aka file ) from the dataset 
-                                    r = requests.post(f"{PENNSIEVE_URL}/data/delete", headers=create_request_headers(ps), json={"things": [f"{my_file['content']['id']}"]})
+                                    r = requests.post(f"{PENNSIEVE_URL}/data/delete", headers=create_request_headers(get_access_token()), json={"things": [f"{my_file['content']['id']}"]})
                                     r.raise_for_status()
                                     del ps_folder_children["files"][original_file_key]
                             if file_key in ps_folder_children["files"] and existing_file_option == "replace":
                                 logger.info(f"list-upload-files log: Found file '{file_key}' on Pennsieve for deletion")
                                 my_file = ps_folder_children["files"][file_key]
                                 # delete the package ( aka file ) from the dataset 
-                                r = requests.post(f"{PENNSIEVE_URL}/data/delete", headers=create_request_headers(ps), json={"things": [f"{my_file['content']['id']}"]})
+                                r = requests.post(f"{PENNSIEVE_URL}/data/delete", headers=create_request_headers(get_access_token()), json={"things": [f"{my_file['content']['id']}"]})
                                 r.raise_for_status()
                                 del ps_folder_children["files"][file_key]
 
@@ -2120,6 +2113,113 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
 
             return list_upload_files
 
+
+
+    list_upload_files = []
+    list_upload_metadata_files = []
+    list_upload_manifest_files = []
+    total_files = 0
+    total_metadata_files = 0
+    total_manifest_files = 0
+    main_total_generate_dataset_size = 0
+
+    existing_folder_option = soda["generate-dataset"]["if-existing"]
+    existing_file_option = soda["generate-dataset"][
+        "if-existing-files"
+    ]
+
+    # we will need a tracking structure to compare against
+    tracking_json_structure = ds
+    normalize_tracking_folder(tracking_json_structure)
+    recursive_create_folder_for_ps(dataset_structure, tracking_json_structure, existing_folder_option, ps)
+    list_upload_files, main_total_generate_dataset_size = recursive_dataset_scan_for_ps(
+        dataset_structure,
+        tracking_json_structure,
+        existing_file_option,
+        list_upload_files,
+        relative_path,
+    )
+
+    logger.info(f"Amount of files to upload: {len(list_upload_files)} ")
+
+
+    # return and mark upload as completed if nothing is added to the manifest
+    if len(list_upload_files) < 1:
+        logger.warning("No files found to upload.")
+        main_curate_progress_message = "No files were uploaded in this session"
+        main_curate_status = "Done"
+        return
+
+    # 3. Add high-level metadata files to a list
+    if "dataset_metadata" in soda.keys():
+        existing_root_files = tracking_json_structure.get("children", {}).get("files", {})
+        create_metadata_files_for_upload(
+            soda, 
+            list_upload_metadata_files,
+            existing_root_files=existing_root_files,
+            existing_file_option=existing_file_option,
+            ps=ps
+        )
+
+    return {
+        "list_upload_files": list_upload_files,
+        "list_upload_metadata_files": list_upload_metadata_files,
+        "list_upload_manifest_files": list_upload_manifest_files,
+        "total_manifest_files": total_manifest_files,
+        "main_total_generate_dataset_size": main_total_generate_dataset_size,
+        "total_files": total_files,
+        "total_metadata_files": total_metadata_files,
+    }
+
+
+
+def create_upload_manifest(soda, ps, ds):
+    global logger
+
+    # Progress tracking variables that are used for the frontend progress bar.
+    global main_curate_progress_message
+    global main_total_generate_dataset_size
+    global main_generated_dataset_size
+    global start_generate
+    global main_initial_bfdataset_size
+    global main_curation_uploaded_files
+    global uploaded_folder_counter
+    global current_size_of_uploaded_files
+    global total_files
+    global total_bytes_uploaded # current number of bytes uploaded to Pennsieve in the current session
+    global client
+    global files_uploaded
+    global total_dataset_files
+    global current_files_in_subscriber_session
+    global renaming_files_flow
+    global bytes_uploaded_per_file
+    global total_bytes_uploaded_per_file
+    global bytes_file_path_dict
+    global elapsed_time
+    global manifest_id
+    global origin_manifest_id
+    global main_curate_status
+    global list_of_files_to_rename
+    global renamed_files_counter
+
+
+
+
+    total_files = 0
+    total_dataset_files = 0
+    total_metadata_files = 0
+    total_manifest_files = 0
+    main_curation_uploaded_files = 0
+    total_bytes_uploaded = {"value": 0}
+    total_bytes_uploaded_per_file = {}
+    files_uploaded = 0
+    renamed_files_counter = 0
+    
+
+    uploaded_folder_counter = 0
+    current_size_of_uploaded_files = 0
+    start = timer()
+    try:
         def monitor_subscriber_progress(events_dict):
             """
             Monitors the progress of a subscriber and unsubscribes once the upload finishes. 
@@ -2175,606 +2275,509 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
 
         # 1. Scan the dataset structure and create a list of files/folders to be uploaded with the desired renaming
         if generate_option == "new" and starting_point == "new":
-            vs = ums.df_mid_has_progress()
-            if resume == False or resume == True and not vs:
-                logger.info("NO progress found so we will start from scratch and construct the manifest")
-                main_curate_progress_message = "Preparing a list of files to upload"
-                # we can assume no files/folders exist in the dataset since the generate option is new and starting point is also new
-                # therefore, we can assume the dataset structure is the same as the tracking structure
-                brand_new_dataset = True
-                list_upload_files = recursive_dataset_scan_for_new_upload(dataset_structure, list_upload_files, relative_path)
+            logger.info("NO progress found so we will start from scratch and construct the manifest")
+            main_curate_progress_message = "Preparing a list of files to upload"
+            # we can assume no files/folders exist in the dataset since the generate option is new and starting point is also new
+            # therefore, we can assume the dataset structure is the same as the tracking structure
+            brand_new_dataset = True
+            list_upload_files = create_upload_information_new(soda, relative_path)
                 
             # For brand new datasets, no existing files to check - upload all metadata files
             logger.info("ps_upload_to_dataset: Creating metadata files for brand new dataset (no existing file checks needed)")
             create_metadata_files_for_upload(soda, list_upload_metadata_files)
-
-
         else:
-            vs = ums.df_mid_has_progress()
+            main_curate_progress_message = "Preparing a list of files to upload"
+            info = create_upload_information_existing(soda, dataset_structure, ds, ps, relative_path)
+            list_upload_files = info["list_upload_files"]
+            list_upload_metadata_files = info["list_upload_metadata_files"]
+            main_total_generate_dataset_size = info["main_total_generate_dataset_size"]
+            total_files = info["total_files"]
+            total_metadata_files = info["total_metadata_files"]
+            brand_new_dataset = False
 
-            if resume == False or resume == True and not vs:
-                main_curate_progress_message = "Preparing a list of files to upload"
-
-                existing_folder_option = soda["generate-dataset"]["if-existing"]
-                existing_file_option = soda["generate-dataset"][
-                    "if-existing-files"
-                ]
-
-                # we will need a tracking structure to compare against
-                tracking_json_structure = ds
-                normalize_tracking_folder(tracking_json_structure)
-                recursive_create_folder_for_ps(dataset_structure, tracking_json_structure, existing_folder_option)
-                list_upload_files = recursive_dataset_scan_for_ps(
-                    dataset_structure,
-                    tracking_json_structure,
-                    existing_file_option,
-                    list_upload_files,
-                    relative_path,
-                )
-
-                logger.info(f"Amount of files to upload: {len(list_upload_files)} ")
-
-
-                # return and mark upload as completed if nothing is added to the manifest
-                if len(list_upload_files) < 1:
-                    logger.warning("No files found to upload.")
-                    main_curate_progress_message = "No files were uploaded in this session"
-                    main_curate_status = "Done"
-                    return
-
-                # 3. Add high-level metadata files to a list
-                if "dataset_metadata" in soda.keys():
-                    logger.info("ps_create_new_dataset (optional) step 3 create high level metadata list")
-                    # Check existing root files to respect if-existing-files option
-                    existing_root_files = tracking_json_structure.get("children", {}).get("files", {})
-                    create_metadata_files_for_upload(
-                        soda, 
-                        list_upload_metadata_files,
-                        existing_root_files=existing_root_files,
-                        existing_file_option=existing_file_option,
-                        ps=ps
-                    )
+            
 
 
         # 2. Count how many files will be uploaded to inform frontend - do not count if we are resuming a previous upload that has made progress
-        if not resume or resume and not ums.df_mid_has_progress():
-            for folderInformation in list_upload_files:
-                file_paths_count = len(folderInformation[0])
-                total_files += file_paths_count
-                total_dataset_files += file_paths_count
+        for folderInformation in list_upload_files:
+            file_paths_count = len(folderInformation[0])
+            total_files += file_paths_count
+            total_dataset_files += file_paths_count
 
 
         # 3. Upload files and add to tracking list
         start_generate = 1
 
         
-        # resuming a dataset that had no files to rename or that failed before renaming any files
-        if resume and ums.df_mid_has_progress() and not ums.get_renaming_files_flow():
-            main_curate_progress_message = ("Preparing to retry upload. Progress on partially uploaded files will be reset.")
-            # reset necessary variables that were used in the failed upload session and cannot be reliably cached
-            bytes_uploaded_per_file = {}
+ 
+        if len(list_upload_files) <= 0:
+            # TODO: Add information showing nothing added and no manifest created or maybe even just throw a 400 error
+            logger.info("Manifest creation: Failed 0 files added to dataset.")
+            raise EmptyDatasetError("The dataset you are trying to upload is empty.")
+        
+        
+        main_curate_progress_message = ("Queuing dataset files for upload with the Pennsieve Agent..." + "<br>" + "This may take some time.")
 
-            # get the current manifest id for data files
-            manifest_id = ums.get_df_mid()
-            # get the cached values of the previous upload session 
-            main_total_generate_dataset_size = ums.get_main_total_generate_dataset_size()
+        first_file_local_path = list_upload_files[0][0][0]
 
-            total_files = ums.get_total_files_to_upload()
-            total_dataset_files = total_files         
-            current_files_in_subscriber_session = total_dataset_files
+        if brand_new_dataset:
+            first_relative_path = list_upload_files[0][4]
+            first_final_name = list_upload_files[0][2][0]
+        else:
+            first_relative_path = list_upload_files[0][6]
+            first_final_name = list_upload_files[0][4][0]
 
-            main_curation_uploaded_files = total_files - ums.get_remaining_file_count(manifest_id, total_files)
-            files_uploaded = main_curation_uploaded_files
-            total_bytes_uploaded["value"] = ums.calculate_completed_upload_size(manifest_id, bytes_file_path_dict, total_files )
+        # Extract folder_name (subfolder path) and high_lvl_folder from relative_path
+        try:
+            slash_idx = first_relative_path.index("/")
+            folder_name = first_relative_path[slash_idx+1:]
+            first_high_lvl_folder = first_relative_path[:slash_idx]
+        except ValueError:
+            # No slash in path - entire path is the high-level folder, no subfolders
+            folder_name = ""
+            first_high_lvl_folder = first_relative_path
 
-            # rename file information 
-            list_of_files_to_rename = ums.get_list_of_files_to_rename()
-            renamed_files_counter = ums.get_rename_total_files()
-            
-            time.sleep(5)
-
-
-            # upload the manifest files
-            try: 
-                ps.manifest.upload(manifest_id)
-                main_curate_progress_message = ("Uploading data files...")
-                # subscribe to the manifest upload so we wait until it has finished uploading before moving on
-                ps.subscribe(10, False, monitor_subscriber_progress)
-            except Exception as e:
-                logger.error("Error uploading dataset files")
-                logger.error(e)
-                raise PennsieveUploadException("The Pennsieve Agent has encountered an issue while uploading. Please retry the upload. If this issue persists please follow this <a target='_blank' rel='noopener noreferrer' href='https://docs.sodaforsparc.io/docs/how-to/how-to-reinstall-the-pennsieve-agent'> guide</a> on performing a full reinstallation of the Pennsieve Agent then click the retry button.")
-        elif resume and ums.df_mid_has_progress() and ums.get_renaming_files_flow():
-            # setup for rename files flow
-            list_of_files_to_rename = ums.get_list_of_files_to_rename()
-            renamed_files_counter = ums.get_rename_total_files()
-        # create a manifest for files - IMP: We use a single file to start with since creating a manifest requires a file path.  We need to remove this at the end. 
-        elif len(list_upload_files) > 0:
-            main_curate_progress_message = ("Queuing dataset files for upload with the Pennsieve Agent..." + "<br>" + "This may take some time.")
-
-            first_file_local_path = list_upload_files[0][0][0]
-
-            if brand_new_dataset:
-                first_relative_path = list_upload_files[0][4]
-                first_final_name = list_upload_files[0][2][0]
+        if first_final_name != basename(first_file_local_path):
+            # if file name is not the same as local path, then it has been renamed in SODA
+            if folder_name not in list_of_files_to_rename:
+                list_of_files_to_rename[folder_name] = {"high_lvl_folder": first_high_lvl_folder}
             else:
-                first_relative_path = list_upload_files[0][6]
-                first_final_name = list_upload_files[0][4][0]
+                # Entry exists but may not have high_lvl_folder set
+                if "high_lvl_folder" not in list_of_files_to_rename[folder_name]:
+                    list_of_files_to_rename[folder_name]["high_lvl_folder"] = first_high_lvl_folder
+            if basename(first_file_local_path) not in list_of_files_to_rename[folder_name]:
+                list_of_files_to_rename[folder_name][basename(first_file_local_path)] = {
+                    "final_file_name": first_final_name,
+                    "id": "",
+                }
+                renamed_files_counter += 1
 
-            # Extract folder_name (subfolder path) and high_lvl_folder from relative_path
-            try:
-                slash_idx = first_relative_path.index("/")
-                folder_name = first_relative_path[slash_idx+1:]
-                first_high_lvl_folder = first_relative_path[:slash_idx]
-            except ValueError:
-                # No slash in path - entire path is the high-level folder, no subfolders
-                folder_name = ""
-                first_high_lvl_folder = first_relative_path
+        manifest_data = ps.manifest.create(first_file_local_path, folder_name)
+        manifest_id = manifest_data.manifest_id
 
-            if first_final_name != basename(first_file_local_path):
-                # if file name is not the same as local path, then it has been renamed in SODA
-                if folder_name not in list_of_files_to_rename:
-                    list_of_files_to_rename[folder_name] = {"high_lvl_folder": first_high_lvl_folder}
+
+        ums.set_df_mid(manifest_id)
+
+        # remove the item just added to the manifest 
+        list_upload_files[0][0].pop(0)
+
+        # reset global variables used in the subscriber monitoring function
+        bytes_uploaded_per_file = {}
+        total_bytes_uploaded = {"value": 0}
+        current_files_in_subscriber_session = total_dataset_files
+
+        # there are files to add to the manifest if there are more than one file in the first folder or more than one folder
+        if len(list_upload_files[0][0]) > 1 or len(list_upload_files) > 1:
+            index_skip = True
+            for folderInformation in list_upload_files:
+                list_file_paths = folderInformation[0]
+                if brand_new_dataset:
+                    relative_path = folderInformation[4]
+                    final_file_name_list = folderInformation[2]
                 else:
-                    # Entry exists but may not have high_lvl_folder set
-                    if "high_lvl_folder" not in list_of_files_to_rename[folder_name]:
-                        list_of_files_to_rename[folder_name]["high_lvl_folder"] = first_high_lvl_folder
-                if basename(first_file_local_path) not in list_of_files_to_rename[folder_name]:
-                    list_of_files_to_rename[folder_name][basename(first_file_local_path)] = {
-                        "final_file_name": first_final_name,
-                        "id": "",
-                    }
-                    renamed_files_counter += 1
+                    relative_path = folderInformation[6]
+                    final_file_name_list = folderInformation[4]
+                # get the substring from the string relative_path that starts at the index of the / and contains the rest of the string
+                try:
+                    slash_idx = relative_path.index("/")
+                    folder_name = relative_path[slash_idx+1:]
+                    high_lvl_folder = relative_path[:slash_idx]
+                except ValueError as e:
+                    # No slash in path - entire path is the high-level folder, no subfolders
+                    folder_name = ""
+                    high_lvl_folder = relative_path
 
-            manifest_data = ps.manifest.create(first_file_local_path, folder_name)
-            manifest_id = manifest_data.manifest_id
-
-
-            ums.set_df_mid(manifest_id)
-
-            # remove the item just added to the manifest 
-            list_upload_files[0][0].pop(0)
-
-            # reset global variables used in the subscriber monitoring function
-            bytes_uploaded_per_file = {}
-            total_bytes_uploaded = {"value": 0}
-            current_files_in_subscriber_session = total_dataset_files
-
-            # there are files to add to the manifest if there are more than one file in the first folder or more than one folder
-            if len(list_upload_files[0][0]) > 1 or len(list_upload_files) > 1:
-                index_skip = True
-                for folderInformation in list_upload_files:
-                    list_file_paths = folderInformation[0]
-                    if brand_new_dataset:
-                        relative_path = folderInformation[4]
-                        final_file_name_list = folderInformation[2]
-                    else:
-                        relative_path = folderInformation[6]
-                        final_file_name_list = folderInformation[4]
-                    # get the substring from the string relative_path that starts at the index of the / and contains the rest of the string
-                    try:
-                        slash_idx = relative_path.index("/")
-                        folder_name = relative_path[slash_idx+1:]
-                        high_lvl_folder = relative_path[:slash_idx]
-                    except ValueError as e:
-                        # No slash in path - entire path is the high-level folder, no subfolders
-                        folder_name = ""
-                        high_lvl_folder = relative_path
-
-                    # Add files to manfiest"
-                    final_files_index = 1 if index_skip else 0
-                    index_skip = False
-                    for file_path in list_file_paths:
-                        file_file_name = final_file_name_list[final_files_index]
-                        if file_file_name != basename(file_path):
-                            # save the relative path, final name and local path of the file to be renamed
-                            if folder_name not in list_of_files_to_rename:
-                                list_of_files_to_rename[folder_name] = {"high_lvl_folder": high_lvl_folder}
-                            else:
-                                # Entry exists but may not have high_lvl_folder set
-                                if "high_lvl_folder" not in list_of_files_to_rename[folder_name]:
-                                    list_of_files_to_rename[folder_name]["high_lvl_folder"] = high_lvl_folder
-                            if basename(file_path) not in list_of_files_to_rename[folder_name]:
-                                renamed_files_counter += 1
-                                list_of_files_to_rename[folder_name][basename(file_path)] = {
-                                    "final_file_name": file_file_name,
-                                    "id": "",
-                                }
-                        ps.manifest.add(file_path, folder_name, manifest_id)
-                        final_files_index += 1
+                # Add files to manfiest"
+                final_files_index = 1 if index_skip else 0
+                index_skip = False
+                for file_path in list_file_paths:
+                    file_file_name = final_file_name_list[final_files_index]
+                    if file_file_name != basename(file_path):
+                        # save the relative path, final name and local path of the file to be renamed
+                        if folder_name not in list_of_files_to_rename:
+                            list_of_files_to_rename[folder_name] = {"high_lvl_folder": high_lvl_folder}
+                        else:
+                            # Entry exists but may not have high_lvl_folder set
+                            if "high_lvl_folder" not in list_of_files_to_rename[folder_name]:
+                                list_of_files_to_rename[folder_name]["high_lvl_folder"] = high_lvl_folder
+                        if basename(file_path) not in list_of_files_to_rename[folder_name]:
+                            renamed_files_counter += 1
+                            list_of_files_to_rename[folder_name][basename(file_path)] = {
+                                "final_file_name": file_file_name,
+                                "id": "",
+                            }
+                    ps.manifest.add(file_path, folder_name, manifest_id)
+                    final_files_index += 1
 
 
-            # add metadata files to the manifest
-            if list_upload_metadata_files:
-                current_files_in_subscriber_session += total_metadata_files
-                # add the files to the manifest
-                for manifest_path in list_upload_metadata_files:
-                    # subprocess call to the pennsieve agent to add the files to the manifest
-                    ps.manifest.add(manifest_path, target_base_path="", manifest_id=manifest_id)
+        # add metadata files to the manifest
+        if list_upload_metadata_files:
+            current_files_in_subscriber_session += total_metadata_files
+            # add the files to the manifest
+            for manifest_path in list_upload_metadata_files:
+                # subprocess call to the pennsieve agent to add the files to the manifest
+                ps.manifest.add(manifest_path, target_base_path="", manifest_id=manifest_id)
 
 
-            # add manifest files to the upload manifest
-            if list_upload_manifest_files:
-                current_files_in_subscriber_session += total_manifest_files
-                for manifest_file_path in list_upload_manifest_files:
-                    # add the file to the manifest
-                    ps.manifest.add(manifest_file_path, "/", manifest_id)
+        # add manifest files to the upload manifest
+        if list_upload_manifest_files:
+            current_files_in_subscriber_session += total_manifest_files
+            for manifest_file_path in list_upload_manifest_files:
+                # add the file to the manifest
+                ps.manifest.add(manifest_file_path, "/", manifest_id)
 
-            
-            # set rename files to ums for upload resuming if this upload fails
-            if renamed_files_counter > 0:
-                ums.set_list_of_files_to_rename(list_of_files_to_rename)
-                ums.set_rename_total_files(renamed_files_counter)
-
-            # upload the manifest files
-            try: 
-                ps.manifest.upload(manifest_id)
-
-                main_curate_progress_message = ("Uploading data files...")
-
-                # subscribe to the manifest upload so we wait until it has finished uploading before moving on
-                ps.subscribe(10, False, monitor_subscriber_progress)
-
-            except Exception as e:
-                logger.error(e)
-                raise PennsieveUploadException("The Pennsieve Agent has encountered an issue while uploading. Please retry the upload. If this issue persists please follow this <a target='_blank' rel='noopener noreferrer' href='https://docs.sodaforsparc.io/docs/how-to/how-to-reinstall-the-pennsieve-agent'> guide</a> on performing a full reinstallation of the Pennsieve Agent then click the retry button.")
+        
+        # set rename files to ums for upload resuming if this upload fails
+        if renamed_files_counter > 0:
+            ums.set_list_of_files_to_rename(list_of_files_to_rename)
+            ums.set_rename_total_files(renamed_files_counter)
 
 
         # wait for all of the Agent's processes to finish to avoid errors when deleting files on Windows
         time.sleep(1)
 
-        # 6. Rename files
-        if list_of_files_to_rename:
-            renaming_files_flow = True
-            logger.info("ps_create_new_dataset (optional) step 8 rename files")
-            logger.info("file-rename-fix-log: Entered rename step, list_of_files_to_rename keys: %s", list(list_of_files_to_rename.keys()))
-            main_curate_progress_message = ("Preparing files to be renamed...")
-            dataset_id = ds["content"]["id"]
-            collection_ids = {}
-            # gets the high level folders in the dataset
-            r = requests.get(f"{PENNSIEVE_URL}/datasets/{dataset_id}", headers=create_request_headers(ps))
-            logger.info("file-rename-fix-log: Requested dataset content for dataset_id: %s", dataset_id)
-            r.raise_for_status()
-            dataset_content = r.json()["children"]
+        # at end of successful session reset tracking for folders created
+        # main_curate_progress_message = "Success: COMPLETED!"
+        # main_curate_status = "Done"
+        main_curate_progress_message = "Success: MANIFEST CREATED!"
+        main_curate_status = "MANIFEST STAGE DONE"
 
-            if dataset_content == []:
-                logger.info("file-rename-fix-log: dataset_content is empty, entering wait loop")
-                while dataset_content == []:
-                    logger.info("file-rename-fix-log: Waiting for dataset_content to be populated...")
-                    time.sleep(5)
-                    r = requests.get(f"{PENNSIEVE_URL}/datasets/{dataset_id}", headers=create_request_headers(ps))
-                    r.raise_for_status()
-                    dataset_content = r.json()["children"]
+        
+        # shutil.rmtree(manifest_folder_path) if isdir(manifest_folder_path) else 0
+        end = timer()
+        logger.info(f"Time for ps_upload_to_dataset function: {timedelta(seconds=end - start)}")
 
-            collections_found = False
-            logger.info("file-rename-fix-log: Starting search for high-level folders in dataset_content")
-            collection_retry_count = 0
-            max_collection_retries = 2  # 1 immediate retry after 5s, then proceed after 10s if still none
-            while not collections_found and collection_retry_count < max_collection_retries:
-                for item in dataset_content:
-                    if item["content"]["packageType"] == "Collection":
-                        collections_found = True
-                        collection_ids[item["content"]["name"]] = {"id": item["content"]["nodeId"]}
-                        logger.info("file-rename-fix-log: Found collection: %s with id: %s", item['content']['name'], item['content']['nodeId'])
+        return {
+                "manifest_id": manifest_id, 
+                "dataset_id": selected_id, 
+                "list_of_files_to_rename": list_of_files_to_rename, 
+                "size_of_dataset": main_total_generate_dataset_size, 
+                "number_of_files": total_files
+                }
+    except Exception as e:
+        logger.error(f"An error occurred in ps_upload_to_dataset function: {str(e)}")
+        raise e
 
-                if not collections_found:
-                    collection_retry_count += 1
-                    logger.info("file-rename-fix-log: No collections found, retrying after 10s... (attempt %d)", collection_retry_count)
-                    time.sleep(10)
-                    r = requests.get(f"{PENNSIEVE_URL}/datasets/{dataset_id}", headers=create_request_headers(ps))
-                    r.raise_for_status()
-                    dataset_content = r.json()["children"]
+
+
+def rename_files_stage():
+    # 6. Rename files
+    if list_of_files_to_rename:
+        renaming_files_flow = True
+        logger.info("ps_create_new_dataset (optional) step 8 rename files")
+        logger.info("file-rename-fix-log: Entered rename step, list_of_files_to_rename keys: %s", list(list_of_files_to_rename.keys()))
+        main_curate_progress_message = ("Preparing files to be renamed...")
+        dataset_id = ds["content"]["id"]
+        collection_ids = {}
+        # gets the high level folders in the dataset
+        r = requests.get(f"{PENNSIEVE_URL}/datasets/{dataset_id}", headers=create_request_headers(ps))
+        logger.info("file-rename-fix-log: Requested dataset content for dataset_id: %s", dataset_id)
+        r.raise_for_status()
+        dataset_content = r.json()["children"]
+
+        if dataset_content == []:
+            logger.info("file-rename-fix-log: dataset_content is empty, entering wait loop")
+            while dataset_content == []:
+                logger.info("file-rename-fix-log: Waiting for dataset_content to be populated...")
+                time.sleep(5)
+                r = requests.get(f"{PENNSIEVE_URL}/datasets/{dataset_id}", headers=create_request_headers(ps))
+                r.raise_for_status()
+                dataset_content = r.json()["children"]
+
+        collections_found = False
+        logger.info("file-rename-fix-log: Starting search for high-level folders in dataset_content")
+        collection_retry_count = 0
+        max_collection_retries = 2  # 1 immediate retry after 5s, then proceed after 10s if still none
+        while not collections_found and collection_retry_count < max_collection_retries:
+            for item in dataset_content:
+                if item["content"]["packageType"] == "Collection":
+                    collections_found = True
+                    collection_ids[item["content"]["name"]] = {"id": item["content"]["nodeId"]}
+                    logger.info("file-rename-fix-log: Found collection: %s with id: %s", item['content']['name'], item['content']['nodeId'])
 
             if not collections_found:
-                logger.info("file-rename-fix-log: Still no collections found after %d retries, proceeding with root-level file renaming.", max_collection_retries)
+                collection_retry_count += 1
+                logger.info("file-rename-fix-log: No collections found, retrying after 10s... (attempt %d)", collection_retry_count)
+                time.sleep(10)
+                r = requests.get(f"{PENNSIEVE_URL}/datasets/{dataset_id}", headers=create_request_headers(ps))
+                r.raise_for_status()
+                dataset_content = r.json()["children"]
 
-            for key in list_of_files_to_rename:
-                # Key structure:
-                # - key='' with high_lvl_folder set: Files directly in a high-level folder (e.g., primary/file.txt)
-                # - key='' with high_lvl_folder='': Files at actual dataset root (no folder)
-                # - key='subfolder' or 'sub1/sub2': Files in subfolders, high_lvl_folder derived from first part of key
-                if key == '':
-                    # Files directly in high-level folder OR at dataset root - use stored high_lvl_folder
-                    high_lvl_folder_name = list_of_files_to_rename[key].get("high_lvl_folder", "")
-                    subfolder_amount = 0
-                    
-                    if high_lvl_folder_name and high_lvl_folder_name in collection_ids:
-                        # Files directly in a high-level folder (e.g., primary/file.txt)
-                        high_lvl_folder_id = collection_ids[high_lvl_folder_name]["id"]
-                        list_of_files_to_rename[key]["id"] = high_lvl_folder_id
-                        
-                        # Get the high-level folder content
-                        limit = 100
-                        offset = 0
-                        folder_content = []
-                        while True:
-                            r = requests.get(f"{PENNSIEVE_URL}/packages/{high_lvl_folder_id}?limit={limit}&offset={offset}", headers=create_request_headers(ps))
-                            r.raise_for_status()
-                            page = r.json().get("children", [])
-                            folder_content.extend(page)
-                            if len(page) < limit:
-                                break
-                            offset += limit
-                        
-                        # Find file IDs
-                        for item in folder_content:
-                            if item["content"]["packageType"] != "Collection":
-                                file_name = item["content"]["name"]
-                                file_id = item["content"]["nodeId"]
-                                if file_name in list_of_files_to_rename[key]:
-                                    list_of_files_to_rename[key][file_name]["id"] = file_id
-                    else:
-                        # Files at actual dataset root (no high-level folder)
-                        list_of_files_to_rename[key]["id"] = dataset_id  # Use dataset_id for root-level lookup
-                        
-                        # Get dataset root content
-                        limit = 100
-                        offset = 0
-                        root_content = []
-                        while True:
-                            r = requests.get(f"{PENNSIEVE_URL}/datasets/{dataset_id}?limit={limit}&offset={offset}", headers=create_request_headers(ps))
-                            r.raise_for_status()
-                            page = r.json().get("children", [])
-                            root_content.extend(page)
-                            if len(page) < limit:
-                                break
-                            offset += limit
-                        
-                        # Find file IDs at root
-                        for item in root_content:
-                            if item["content"]["packageType"] != "Collection":
-                                file_name = item["content"]["name"]
-                                file_id = item["content"]["nodeId"]
-                                if file_name in list_of_files_to_rename[key]:
-                                    list_of_files_to_rename[key][file_name]["id"] = file_id
-                    continue
+        if not collections_found:
+            logger.info("file-rename-fix-log: Still no collections found after %d retries, proceeding with root-level file renaming.", max_collection_retries)
+
+        for key in list_of_files_to_rename:
+            # Key structure:
+            # - key='' with high_lvl_folder set: Files directly in a high-level folder (e.g., primary/file.txt)
+            # - key='' with high_lvl_folder='': Files at actual dataset root (no folder)
+            # - key='subfolder' or 'sub1/sub2': Files in subfolders, high_lvl_folder derived from first part of key
+            if key == '':
+                # Files directly in high-level folder OR at dataset root - use stored high_lvl_folder
+                high_lvl_folder_name = list_of_files_to_rename[key].get("high_lvl_folder", "")
+                subfolder_amount = 0
                 
-                # Non-empty key: derive high_lvl_folder from the key itself (first part before /)
-                relative_path = key.split("/")
-                high_lvl_folder_name = relative_path[0]
-                subfolder_level = 0
-                subfolder_amount = len(relative_path) - 1
-
-                if high_lvl_folder_name in collection_ids:
-                    # subfolder_amount will be the amount of subfolders we need to call until we can get the file ID to rename
-
+                if high_lvl_folder_name and high_lvl_folder_name in collection_ids:
+                    # Files directly in a high-level folder (e.g., primary/file.txt)
                     high_lvl_folder_id = collection_ids[high_lvl_folder_name]["id"]
+                    list_of_files_to_rename[key]["id"] = high_lvl_folder_id
+                    
+                    # Get the high-level folder content
                     limit = 100
                     offset = 0
-                    dataset_content = []
+                    folder_content = []
                     while True:
                         r = requests.get(f"{PENNSIEVE_URL}/packages/{high_lvl_folder_id}?limit={limit}&offset={offset}", headers=create_request_headers(ps))
                         r.raise_for_status()
-                        page = r.json()["children"]
-                        dataset_content.extend(page)
-
+                        page = r.json().get("children", [])
+                        folder_content.extend(page)
                         if len(page) < limit:
                             break
                         offset += limit
+                    
+                    # Find file IDs
+                    for item in folder_content:
+                        if item["content"]["packageType"] != "Collection":
+                            file_name = item["content"]["name"]
+                            file_id = item["content"]["nodeId"]
+                            if file_name in list_of_files_to_rename[key]:
+                                list_of_files_to_rename[key][file_name]["id"] = file_id
+                else:
+                    # Files at actual dataset root (no high-level folder)
+                    list_of_files_to_rename[key]["id"] = dataset_id  # Use dataset_id for root-level lookup
+                    
+                    # Get dataset root content
+                    limit = 100
+                    offset = 0
+                    root_content = []
+                    while True:
+                        r = requests.get(f"{PENNSIEVE_URL}/datasets/{dataset_id}?limit={limit}&offset={offset}", headers=create_request_headers(ps))
+                        r.raise_for_status()
+                        page = r.json().get("children", [])
+                        root_content.extend(page)
+                        if len(page) < limit:
+                            break
+                        offset += limit
+                    
+                    # Find file IDs at root
+                    for item in root_content:
+                        if item["content"]["packageType"] != "Collection":
+                            file_name = item["content"]["name"]
+                            file_id = item["content"]["nodeId"]
+                            if file_name in list_of_files_to_rename[key]:
+                                list_of_files_to_rename[key][file_name]["id"] = file_id
+                continue
+            
+            # Non-empty key: derive high_lvl_folder from the key itself (first part before /)
+            relative_path = key.split("/")
+            high_lvl_folder_name = relative_path[0]
+            subfolder_level = 0
+            subfolder_amount = len(relative_path) - 1
 
-                    if dataset_content == []:
-                        # request until there is no children content, (folder is empty so files have not been processed yet)
-                        while dataset_content == []:
-                            time.sleep(3)
-                            limit = 100 
-                            offset = 0 
+            if high_lvl_folder_name in collection_ids:
+                # subfolder_amount will be the amount of subfolders we need to call until we can get the file ID to rename
 
-                            while True:
-                                r = requests.get(f"{PENNSIEVE_URL}/packages/{high_lvl_folder_id}?limit={limit}&offset={offset}", headers=create_request_headers(ps))
-                                r.raise_for_status()
-                                page = r.json()["children"]
-                                dataset_content.extend(page)
-                                if len(page) < limit:
-                                    break
-                                offset += limit
-                            
+                high_lvl_folder_id = collection_ids[high_lvl_folder_name]["id"]
+                limit = 100
+                offset = 0
+                dataset_content = []
+                while True:
+                    r = requests.get(f"{PENNSIEVE_URL}/packages/{high_lvl_folder_id}?limit={limit}&offset={offset}", headers=create_request_headers(ps))
+                    r.raise_for_status()
+                    page = r.json()["children"]
+                    dataset_content.extend(page)
 
-                    if subfolder_amount == 0:
-                        # the file is in the high level folder
-                        if "id" not in list_of_files_to_rename[key]:
-                            # store the id of the folder to be used again in case the file id is not found (happens when not all files have been processed yet)
-                            list_of_files_to_rename[key]["id"] = high_lvl_folder_id
+                    if len(page) < limit:
+                        break
+                    offset += limit
+
+                if dataset_content == []:
+                    # request until there is no children content, (folder is empty so files have not been processed yet)
+                    while dataset_content == []:
+                        time.sleep(3)
+                        limit = 100 
+                        offset = 0 
+
+                        while True:
+                            r = requests.get(f"{PENNSIEVE_URL}/packages/{high_lvl_folder_id}?limit={limit}&offset={offset}", headers=create_request_headers(ps))
+                            r.raise_for_status()
+                            page = r.json()["children"]
+                            dataset_content.extend(page)
+                            if len(page) < limit:
+                                break
+                            offset += limit
+                        
+
+                if subfolder_amount == 0:
+                    # the file is in the high level folder
+                    if "id" not in list_of_files_to_rename[key]:
+                        # store the id of the folder to be used again in case the file id is not found (happens when not all files have been processed yet)
+                        list_of_files_to_rename[key]["id"] = high_lvl_folder_id
+                    
+                    for item in dataset_content:
+                        if item["content"]["packageType"] != "Collection":
+                            file_name = item["content"]["name"]
+                            file_id = item["content"]["nodeId"]
+
+                            if file_name in list_of_files_to_rename[key]:
+                                list_of_files_to_rename[key][file_name]["id"] = file_id
+                else:
+                    # file is within a subfolder and we recursively iterate until we get to the last subfolder needed
+                    subfolder_id = collection_ids[high_lvl_folder_name]["id"]
+                    while subfolder_level != subfolder_amount:
+                        if dataset_content == []:
+                            # subfolder has no content so request again
+                            while dataset_content == []:
+                                time.sleep(3)
+                                limit = 100 
+                                offset = 0
+                                while True: 
+                                    r = requests.get(f"{PENNSIEVE_URL}/packages/{subfolder_id}", headers=create_request_headers(ps))
+                                    r.raise_for_status()
+                                    page = r.json()["children"]
+                                    dataset_content.extend(page)
+                                    if len(page) < limit:
+                                        break
+                                    offset += limit
+                    
+                        for item in dataset_content:
+                            if item["content"]["packageType"] == "Collection":
+                                folder_name = item["content"]["name"]
+                                folder_id = item["content"]["nodeId"]
+
+                                if folder_name in relative_path:
+                                    # we have found the folder we need to iterate through
+                                    subfolder_level += 1
+
+                                    limit = 100
+                                    offset = 0 
+                                    children = []
+                                    while True: 
+                                        r = requests.get(f"{PENNSIEVE_URL}/packages/{folder_id}?limit={limit}&offset={offset}", headers=create_request_headers(ps))
+                                        r.raise_for_status()
+                                        page = r.json()["children"]
+                                        children.extend(page)
+                                        if len(page) < limit:
+                                            break
+                                        offset += limit
+
+                                    if subfolder_level != subfolder_amount:
+                                        dataset_content = children
+                                        if dataset_content == []:
+                                            while dataset_content == []:
+                                                # subfolder has no content so request again
+                                                time.sleep(3)
+                                                limit = 100
+                                                offset = 0 
+                                                while True: 
+                                                    r = requests.get(f"{PENNSIEVE_URL}/packages/{folder_id}", headers=create_request_headers(ps))
+                                                    r.raise_for_status()
+                                                    page = r.json()["children"]
+                                                    dataset_content.extend(page)
+                                                    if len(page) < limit:
+                                                        break
+                                                    offset += limit
+                                                
+                                        subfolder_id = folder_id
+                                        break
+                                    else:
+                                        # we are at the last folder in the relative path, we can get the file id
+                                        if "id" not in list_of_files_to_rename[key]:
+                                            # store the id of the last folder to directly call later in case not all files get an id
+                                            list_of_files_to_rename[key]["id"] = folder_id
+                                        for item in children:
+                                            if item["content"]["packageType"] != "Collection":
+                                                file_name = item["content"]["name"]
+                                                file_id = item["content"]["nodeId"]
+
+                                                if file_name in list_of_files_to_rename[key]:
+                                                    # store the package id for renaming
+                                                    list_of_files_to_rename[key][file_name]["id"] = file_id
+                                else:
+                                    continue
+
+        # 8.5 Rename files - All or most ids have been fetched now rename the files or gather the ids again if not all files have been processed at this time
+        main_curate_progress_message = "Renaming files..."
+        main_generated_dataset_size = 0
+        main_total_generate_dataset_size = renamed_files_counter
+        for relative_path in list_of_files_to_rename:
+            # Check if "id" exists for this path (may not exist if not yet set)
+            if "id" not in list_of_files_to_rename[relative_path]:
+                logger.warning(f"No 'id' key found for relative_path '{relative_path}', skipping...")
+                continue
+            
+            collection_id = list_of_files_to_rename[relative_path]["id"]
+            high_lvl_folder_name = list_of_files_to_rename[relative_path].get("high_lvl_folder", "")
+            # Check if this is a dataset root file (key='' and no high_lvl_folder)
+            is_dataset_root = (relative_path == '' and not high_lvl_folder_name)
+            
+            for file in list_of_files_to_rename[relative_path].keys():
+                if file == "id" or file == "high_lvl_folder":
+                    continue
+                new_name = list_of_files_to_rename[relative_path][file]["final_file_name"]
+                file_id = list_of_files_to_rename[relative_path][file]["id"]
+
+                if file_id != "":
+                    # id was found so make api call to rename with final file name
+                    try:
+                        r = requests.put(f"{PENNSIEVE_URL}/packages/{file_id}?updateStorage=true", json={"name": new_name}, headers=create_request_headers(ps))
+                        r.raise_for_status()
+                    except Exception as e:
+                        if r.status_code == 500:
+                            continue
+                    main_generated_dataset_size += 1
+                else:
+                    # id was not found so keep trying to get the id until it is found
+                    all_ids_found = False
+                    retry_attempts = 0
+                    max_retry_attempts = 60
+                    while not all_ids_found and retry_attempts < max_retry_attempts:
+                        retry_attempts += 1
+                        time.sleep(3)
+
+                        limit = 100
+                        offset = 0
+                        dataset_content = []
+
+                        # Use correct endpoint: /datasets/ for root-level files, /packages/ for folder files
+                        while True:
+                            if is_dataset_root:
+                                r = requests.get(f"{PENNSIEVE_URL}/datasets/{collection_id}?limit={limit}&offset={offset}", headers=create_request_headers(ps))
+                            else:
+                                r = requests.get(f"{PENNSIEVE_URL}/packages/{collection_id}?limit={limit}&offset={offset}", headers=create_request_headers(ps))
+                            r.raise_for_status()
+                            page = r.json().get("children", [])
+                            dataset_content.extend(page)
+                            if len(page) < limit:
+                                break
+                            offset += limit
                         
                         for item in dataset_content:
                             if item["content"]["packageType"] != "Collection":
                                 file_name = item["content"]["name"]
-                                file_id = item["content"]["nodeId"]
+                                found_file_id = item["content"]["nodeId"]
 
-                                if file_name in list_of_files_to_rename[key]:
-                                    list_of_files_to_rename[key][file_name]["id"] = file_id
-                    else:
-                        # file is within a subfolder and we recursively iterate until we get to the last subfolder needed
-                        subfolder_id = collection_ids[high_lvl_folder_name]["id"]
-                        while subfolder_level != subfolder_amount:
-                            if dataset_content == []:
-                                # subfolder has no content so request again
-                                while dataset_content == []:
-                                    time.sleep(3)
-                                    limit = 100 
-                                    offset = 0
-                                    while True: 
-                                        r = requests.get(f"{PENNSIEVE_URL}/packages/{subfolder_id}", headers=create_request_headers(ps))
+                                if file_name == file:
+                                    # id was found so make api call to rename with final file name
+                                    try:
+                                        r = requests.put(f"{PENNSIEVE_URL}/packages/{found_file_id}?updateStorage=true", json={"name": new_name}, headers=create_request_headers(ps))
                                         r.raise_for_status()
-                                        page = r.json()["children"]
-                                        dataset_content.extend(page)
-                                        if len(page) < limit:
-                                            break
-                                        offset += limit
-                        
-                            for item in dataset_content:
-                                if item["content"]["packageType"] == "Collection":
-                                    folder_name = item["content"]["name"]
-                                    folder_id = item["content"]["nodeId"]
-
-                                    if folder_name in relative_path:
-                                        # we have found the folder we need to iterate through
-                                        subfolder_level += 1
-
-                                        limit = 100
-                                        offset = 0 
-                                        children = []
-                                        while True: 
-                                            r = requests.get(f"{PENNSIEVE_URL}/packages/{folder_id}?limit={limit}&offset={offset}", headers=create_request_headers(ps))
-                                            r.raise_for_status()
-                                            page = r.json()["children"]
-                                            children.extend(page)
-                                            if len(page) < limit:
-                                                break
-                                            offset += limit
-
-                                        if subfolder_level != subfolder_amount:
-                                            dataset_content = children
-                                            if dataset_content == []:
-                                                while dataset_content == []:
-                                                    # subfolder has no content so request again
-                                                    time.sleep(3)
-                                                    limit = 100
-                                                    offset = 0 
-                                                    while True: 
-                                                        r = requests.get(f"{PENNSIEVE_URL}/packages/{folder_id}", headers=create_request_headers(ps))
-                                                        r.raise_for_status()
-                                                        page = r.json()["children"]
-                                                        dataset_content.extend(page)
-                                                        if len(page) < limit:
-                                                            break
-                                                        offset += limit
-                                                    
-                                            subfolder_id = folder_id
-                                            break
-                                        else:
-                                            # we are at the last folder in the relative path, we can get the file id
-                                            if "id" not in list_of_files_to_rename[key]:
-                                                # store the id of the last folder to directly call later in case not all files get an id
-                                                list_of_files_to_rename[key]["id"] = folder_id
-                                            for item in children:
-                                                if item["content"]["packageType"] != "Collection":
-                                                    file_name = item["content"]["name"]
-                                                    file_id = item["content"]["nodeId"]
-
-                                                    if file_name in list_of_files_to_rename[key]:
-                                                        # store the package id for renaming
-                                                        list_of_files_to_rename[key][file_name]["id"] = file_id
-                                    else:
-                                        continue
-
-            # 8.5 Rename files - All or most ids have been fetched now rename the files or gather the ids again if not all files have been processed at this time
-            main_curate_progress_message = "Renaming files..."
-            main_generated_dataset_size = 0
-            main_total_generate_dataset_size = renamed_files_counter
-            for relative_path in list_of_files_to_rename:
-                # Check if "id" exists for this path (may not exist if not yet set)
-                if "id" not in list_of_files_to_rename[relative_path]:
-                    logger.warning(f"No 'id' key found for relative_path '{relative_path}', skipping...")
-                    continue
-                
-                collection_id = list_of_files_to_rename[relative_path]["id"]
-                high_lvl_folder_name = list_of_files_to_rename[relative_path].get("high_lvl_folder", "")
-                # Check if this is a dataset root file (key='' and no high_lvl_folder)
-                is_dataset_root = (relative_path == '' and not high_lvl_folder_name)
-                
-                for file in list_of_files_to_rename[relative_path].keys():
-                    if file == "id" or file == "high_lvl_folder":
-                        continue
-                    new_name = list_of_files_to_rename[relative_path][file]["final_file_name"]
-                    file_id = list_of_files_to_rename[relative_path][file]["id"]
-
-                    if file_id != "":
-                        # id was found so make api call to rename with final file name
-                        try:
-                            r = requests.put(f"{PENNSIEVE_URL}/packages/{file_id}?updateStorage=true", json={"name": new_name}, headers=create_request_headers(ps))
-                            r.raise_for_status()
-                        except Exception as e:
-                            if r.status_code == 500:
-                                continue
-                        main_generated_dataset_size += 1
-                    else:
-                        # id was not found so keep trying to get the id until it is found
-                        all_ids_found = False
-                        retry_attempts = 0
-                        max_retry_attempts = 60
-                        while not all_ids_found and retry_attempts < max_retry_attempts:
-                            retry_attempts += 1
-                            time.sleep(3)
-
-                            limit = 100
-                            offset = 0
-                            dataset_content = []
-
-                            # Use correct endpoint: /datasets/ for root-level files, /packages/ for folder files
-                            while True:
-                                if is_dataset_root:
-                                    r = requests.get(f"{PENNSIEVE_URL}/datasets/{collection_id}?limit={limit}&offset={offset}", headers=create_request_headers(ps))
-                                else:
-                                    r = requests.get(f"{PENNSIEVE_URL}/packages/{collection_id}?limit={limit}&offset={offset}", headers=create_request_headers(ps))
-                                r.raise_for_status()
-                                page = r.json().get("children", [])
-                                dataset_content.extend(page)
-                                if len(page) < limit:
+                                    except Exception as e:
+                                        if r.status_code == 500:
+                                            continue
+                                    main_generated_dataset_size += 1
+                                    all_ids_found = True
                                     break
-                                offset += limit
-                            
-                            for item in dataset_content:
-                                if item["content"]["packageType"] != "Collection":
-                                    file_name = item["content"]["name"]
-                                    found_file_id = item["content"]["nodeId"]
-
-                                    if file_name == file:
-                                        # id was found so make api call to rename with final file name
-                                        try:
-                                            r = requests.put(f"{PENNSIEVE_URL}/packages/{found_file_id}?updateStorage=true", json={"name": new_name}, headers=create_request_headers(ps))
-                                            r.raise_for_status()
-                                        except Exception as e:
-                                            if r.status_code == 500:
-                                                continue
-                                        main_generated_dataset_size += 1
-                                        all_ids_found = True
-                                        break
-                        
-                        if not all_ids_found:
-                            logger.warning(f"Could not find file ID for '{file}' after {max_retry_attempts} attempts")
+                    
+                    if not all_ids_found:
+                        logger.warning(f"Could not find file ID for '{file}' after {max_retry_attempts} attempts")
 
 
         
 
 
                 # get the manifest id of the Pennsieve upload manifest created when uploading
-        
-                
-        origin_manifest_id = get_origin_manifest_id(selected_id)
+  
 
-        # if files were uploaded but later receive the 'Failed' status in the Pennsieve manifest we allow users to retry the upload; set the pre-requisite information for the upload to 
-        # be retried in that case
-        # NOTE: We do not need to store the rename information here. Rationale: If the upload for a file failed the rename could not succeed and we would not reach this point. 
-        #       What would happen instead is as follows(in an optimistic case where the upload doesnt keep being marked as Failed): 
-        #      1. The upload for a file fails
-        #      2. The upload information gets (including rename information ) stored in the catchall error handling block 
-        #      3. The user retries the upload
-        #      4. The manifest counts the Failed file as a file to be retried 
-        #      5. The manifest is uploaded again and the file is uploaded again
-        #      6. The file is renamed successfully this time
-        ums.set_main_total_generate_dataset_size(main_total_generate_dataset_size)
-        ums.set_total_files_to_upload(total_files)
-        ums.set_elapsed_time(elapsed_time)        
-        
-        # at end of successful session reset tracking for folders created
-        main_curate_progress_message = "Success: COMPLETED!"
-        main_curate_status = "Done"
-
-        
-        shutil.rmtree(manifest_folder_path) if isdir(manifest_folder_path) else 0
-        end = timer()
-        logger.info(f"Time for ps_upload_to_dataset function: {timedelta(seconds=end - start)}")
-    except Exception as e:
-        logger.error(f"An error occurred in ps_upload_to_dataset function: {str(e)}")
-        # reset the total bytes uploaded for any file that has not been fully uploaded
-        ums.set_main_total_generate_dataset_size(main_total_generate_dataset_size)
-        ums.set_total_files_to_upload(total_files)
-        ums.set_elapsed_time(elapsed_time)
-        # store the renaming files information in case the upload fails and we need to rename files during the retry
-        ums.set_renaming_files_flow(renaming_files_flow) # this determines if we failed while renaming files after the upload is complete
-        ums.set_rename_total_files(renamed_files_counter)
-        ums.set_list_of_files_to_rename(list_of_files_to_rename)
-        raise e
 
 main_curate_status = ""
 main_curate_print_status = ""
@@ -2985,75 +2988,55 @@ def generate_new_ds_ps(soda, dataset_name, ps):
     ds = ps_create_new_dataset(dataset_name, ps)
     selected_dataset_id = ds["content"]["id"]    
     myds = get_dataset_with_backoff(selected_dataset_id)
-    ps_upload_to_dataset(soda, ps, myds, False)
+    return myds
 
 
-def generate_dataset(soda, resume, ps):
+def manifest_file_factory(soda, resume, ps):
     global main_generate_destination
     global main_total_generate_dataset_size
 
- 
-    # Generate dataset locally
-    if generating_locally(soda):
-        logger.info("generate_dataset generating_locally")
-        main_generate_destination = soda["generate-dataset"][
-            "destination"
-        ]
-        _, main_total_generate_dataset_size = generate_dataset_locally(
-            soda
+    main_generate_destination = soda["generate-dataset"]["destination"]
+
+    logger.info("manifest_file_factory determining if generating manifest for new or existing dataset")
+    logger.info(f"uploading_to_existing={uploading_to_existing_ps_dataset(soda)}")
+
+    if uploading_to_existing_ps_dataset(soda):
+        logger.info("PATH: Existing PS dataset")
+        selected_dataset_id = get_dataset_id(
+            soda["ps-dataset-selected"]["dataset-name"]
         )
+        # make an api request to pennsieve to get the dataset details
+        r = requests.get(f"{PENNSIEVE_URL}/datasets/{selected_dataset_id}", headers=create_request_headers(get_access_token()))
+        r.raise_for_status()
+        myds = r.json()
 
-    # Generate dataset to Pennsieve
-    if generating_on_ps(soda):
-        main_generate_destination = soda["generate-dataset"]["destination"]
+        clean_existing_ps_dataset(soda, myds)
+        return create_upload_manifest(soda, ps, myds)
+    else:
+        logger.info("PATH: New PS Dataset")
+        dataset_name = soda["generate-dataset"]["dataset-name"]
 
-        logger.info("generate_dataset generating_on_ps")
-        logger.info(f"resume={resume}, can_resume={can_resume_prior_upload(resume)}")
-        logger.info(f"uploading_to_existing={uploading_to_existing_ps_dataset(soda)}")
-
-        if uploading_to_existing_ps_dataset(soda):
-            logger.info("PATH: Existing PS Dataset")
-            selected_dataset_id = get_dataset_id(
-                soda["ps-dataset-selected"]["dataset-name"]
-            )
-            # make an api request to pennsieve to get the dataset details
-            r = requests.get(f"{PENNSIEVE_URL}/datasets/{selected_dataset_id}", headers=create_request_headers(get_access_token()))
-            r.raise_for_status()
-            myds = r.json()
-
-            if can_resume_prior_upload(resume):
-                logger.info("PATH: Existing PS Dataset -> RESUME -> ps_upload_to_dataset")
-                ps_upload_to_dataset(soda, ps, myds, resume)
+        logger.info("PATH: New PS Dataset -> checking if dataset exists")
+        try: 
+            selected_dataset_id = get_dataset_id(dataset_name)
+            logger.info(f"PATH: New PS Dataset ->  dataset exists ({selected_dataset_id}) -> ps_upload_to_dataset")
+        except Exception as e:
+            if isinstance(e, PennsieveDatasetCannotBeFound):
+                logger.info("PATH: New PS Dataset ->  dataset not found -> create_upload_manifest")
+                myds =  generate_new_ds_ps(soda, dataset_name, ps)
+                logger.info("New dataset flow - initiating manifest creation")
+                return create_upload_manifest(soda, ps, myds)
             else:
-                logger.info("PATH: Existing PS Dataset -> NO RESUME -> ps_update_existing_dataset")
-                ps_update_existing_dataset(soda, myds, ps, resume)
-        else:
-            logger.info("PATH: New PS Dataset")
-            dataset_name = soda["generate-dataset"]["dataset-name"]
-            if resume:
-                logger.info("PATH: New PS Dataset -> RESUME -> generate_new_ds_ps_resume")
-                generate_new_ds_ps_resume(soda, dataset_name, ps)
-            else:
-                logger.info("PATH: New PS Dataset -> NO RESUME -> checking if dataset exists")
-                try: 
-                    selected_dataset_id = get_dataset_id(dataset_name)
-                    logger.info(f"PATH: New PS Dataset -> NO RESUME -> dataset exists ({selected_dataset_id}) -> ps_upload_to_dataset")
-                except Exception as e:
-                    if isinstance(e, PennsieveDatasetCannotBeFound):
-                        logger.info("PATH: New PS Dataset -> NO RESUME -> dataset not found -> generate_new_ds_ps")
-                        generate_new_ds_ps(soda, dataset_name, ps)
-                        return
-                    else:
-                        raise Exception(f"{e.status_code}, {e.message}")
-                myds = get_dataset_with_backoff(selected_dataset_id)
-            
-                ps_upload_to_dataset(soda, ps, myds, resume)
+                raise Exception(f"{e.status_code}, {e.message}")
+        myds = get_dataset_with_backoff(selected_dataset_id)
+    
+        ps_upload_to_dataset(soda, ps, myds, resume)
 
                         
                 
 
 
-def validate_dataset_structure(soda, resume):
+def validate_dataset_structure(soda):
 
     global main_curate_status
     global main_curate_progress_message
@@ -3152,7 +3135,7 @@ def validate_dataset_structure(soda, resume):
 
     logger.info("main_curate_function step 1.3.2")
     # Check that bf files/folders exist (Only used for when generating from an existing Pennsieve dataset)
-    if uploading_to_existing_ps_dataset(soda) and can_resume_prior_upload(resume) == False:                     
+    if uploading_to_existing_ps_dataset(soda):                     
         try:
             main_curate_progress_message = (
                 "Checking that the Pennsieve files and folders are valid"
@@ -3224,59 +3207,38 @@ def reset_upload_session_environment(resume):
 
 
 
-def main_curate_function(soda, resume):
+def create_upload_manifest_pipeline(soda, resume):
     global logger
     global main_curate_status
     global manifest_id 
     global origin_manifest_id
     global total_files
     global curation_error_message
+    global main_curation
+    global main
+    global main_curate_progress_message
+    global ps
 
-    logger.info("Starting generating selected dataset")
+    logger.info("Creating upload manifest")
     logger.info(f"Generating dataset metadata generate-options={soda['generate-dataset']}")
 
-
-    reset_upload_session_environment(resume)
-
-
-    validate_dataset_structure(soda, resume)
+    validate_dataset_structure(soda)
 
     logger.info("Generating dataset step 3")
 
 
     # 2] Generate
-    main_curate_progress_message = "Generating dataset"
+    main_curate_progress_message = "Preparing dataset for upload..."
     try:
-        destination = soda["generate-dataset"]["destination"]
-        ps = None
-        
-        if destination == "local":
-            logger.info("main_curate_function generating locally")
-        else:
-            logger.info("main_curate_function generating on Pennsieve")
-            accountname = soda["ps-account-selected"]["account-name"]
-            ps = connect_pennsieve_client(accountname)
-        
-        generate_dataset(soda, resume, ps)
+        logger.info("Creating Pennsieve manifest")
+        accountname = soda["ps-account-selected"]["account-name"]
+        ps = connect_pennsieve_client(accountname)
+        return manifest_file_factory(soda, ps)
     except Exception as e:
-        logger.error(f"An error occurred in main_curate_function function: {str(e)}")
+        logger.error("Error creating manifest file")
         main_curate_status = "Done"
         curation_error_message = str(e)
         raise e
-
-    main_curate_status = "Done"
-    main_curate_progress_message = "Success: COMPLETED!"
-
-
-    logger.info(f"Finished generating dataset")
-    return {
-        "main_curate_progress_message": main_curate_progress_message,
-        "main_total_generate_dataset_size": main_total_generate_dataset_size,
-        "main_curation_uploaded_files": main_curation_uploaded_files,
-        "local_manifest_id": manifest_id,
-        "origin_manifest_id": origin_manifest_id,
-        "main_curation_total_files": total_files,
-    }
 
 
 
