@@ -1,4 +1,4 @@
-from pennsieve2 import Pennsieve
+from pennsieve import Pennsieve
 import re
 import math
 

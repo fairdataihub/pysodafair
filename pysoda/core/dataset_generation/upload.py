@@ -840,7 +840,7 @@ def ps_create_new_dataset(datasetname, ps):
             
         
         # Create the dataset on Pennsieve
-        r = requests.post(f"{PENNSIEVE_URL}/datasets", headers=create_request_headers(ps), json={"name": datasetname})
+        r = requests.post(f"{PENNSIEVE_URL}/datasets", headers=create_request_headers(get_access_token()), json={"name": datasetname})
         r.raise_for_status()
 
 
@@ -909,7 +909,7 @@ def create_high_lvl_manifest_files_existing_ps(
             offset = 0 
             ps_folder = {"children": []}
             while True: 
-                r = requests.get(f"{PENNSIEVE_URL}/packages/{folder['content']['id']}?limit={limit}&offset={offset}", headers=create_request_headers(ps), json={"include": "files"})
+                r = requests.get(f"{PENNSIEVE_URL}/packages/{folder['content']['id']}?limit={limit}&offset={offset}", headers=create_request_headers(get_access_token()), json={"include": "files"})
                 r.raise_for_status()
                 page = r.json()
                 normalize_tracking_folder(page)
@@ -932,7 +932,7 @@ def create_high_lvl_manifest_files_existing_ps(
         for _, file in folder["children"]["files"].items():
             if file['content']['name'] != "manifest":
                 file_id = file['content']['id']
-                r = requests.get(f"{PENNSIEVE_URL}/packages/{file_id}/view", headers=create_request_headers(ps))
+                r = requests.get(f"{PENNSIEVE_URL}/packages/{file_id}/view", headers=create_request_headers(get_access_token()))
                 r.raise_for_status()
                 file_details = r.json()
                 file_name = file_details[0]["content"]["name"]
@@ -1163,13 +1163,13 @@ def create_high_lvl_manifest_files_existing_ps(
                 manifest_df = pd.DataFrame()
                 for file_key, file in high_level_folder['children']['files'].items():
                     file_id = file['content']['id']
-                    r = requests.get(f"{PENNSIEVE_URL}/packages/{file_id}/view", headers=create_request_headers(ps))
+                    r = requests.get(f"{PENNSIEVE_URL}/packages/{file_id}/view", headers=create_request_headers(get_access_token()))
                     r.raise_for_status()
                     file_details = r.json()
                     file_name_with_extension = file_details[0]["content"]["name"]
                     if file_name_with_extension in manifest_sparc:
                         file_id_2 = file_details[0]["content"]["id"]
-                        r = requests.get(f"{PENNSIEVE_URL}/packages/{file_id}/files/{file_id_2}", headers=create_request_headers(ps))
+                        r = requests.get(f"{PENNSIEVE_URL}/packages/{file_id}/files/{file_id_2}", headers=create_request_headers(get_access_token()))
                         r.raise_for_status()
                         file_url_info = r.json()
                         file_url = file_url_info["url"]
@@ -1719,7 +1719,7 @@ def create_metadata_files_for_upload(soda, list_upload_metadata_files, existing_
             return
         
         try:
-            r = requests.post(f"{PENNSIEVE_URL}/data/delete", headers=create_request_headers(ps), json={"things": [file_id]})
+            r = requests.post(f"{PENNSIEVE_URL}/data/delete", headers=create_request_headers(get_access_token()), json={"things": [file_id]})
             r.raise_for_status()
             files_deleted += 1
             logger.info(f"create_metadata_files_for_upload: Deleted existing '{filename}' (ID: {file_id}) on Pennsieve")
@@ -2460,7 +2460,7 @@ def create_upload_manifest(soda, ps, ds):
 
 
 
-def rename_files_stage():
+def rename_files_stage(ds):
     # 6. Rename files
     if list_of_files_to_rename:
         renaming_files_flow = True
@@ -2470,7 +2470,7 @@ def rename_files_stage():
         dataset_id = ds["content"]["id"]
         collection_ids = {}
         # gets the high level folders in the dataset
-        r = requests.get(f"{PENNSIEVE_URL}/datasets/{dataset_id}", headers=create_request_headers(ps))
+        r = requests.get(f"{PENNSIEVE_URL}/datasets/{dataset_id}", headers=create_request_headers(get_access_token()))
         logger.info("file-rename-fix-log: Requested dataset content for dataset_id: %s", dataset_id)
         r.raise_for_status()
         dataset_content = r.json()["children"]
@@ -2480,7 +2480,7 @@ def rename_files_stage():
             while dataset_content == []:
                 logger.info("file-rename-fix-log: Waiting for dataset_content to be populated...")
                 time.sleep(5)
-                r = requests.get(f"{PENNSIEVE_URL}/datasets/{dataset_id}", headers=create_request_headers(ps))
+                r = requests.get(f"{PENNSIEVE_URL}/datasets/{dataset_id}", headers=create_request_headers(get_access_token()))
                 r.raise_for_status()
                 dataset_content = r.json()["children"]
 
@@ -2499,7 +2499,7 @@ def rename_files_stage():
                 collection_retry_count += 1
                 logger.info("file-rename-fix-log: No collections found, retrying after 10s... (attempt %d)", collection_retry_count)
                 time.sleep(10)
-                r = requests.get(f"{PENNSIEVE_URL}/datasets/{dataset_id}", headers=create_request_headers(ps))
+                r = requests.get(f"{PENNSIEVE_URL}/datasets/{dataset_id}", headers=create_request_headers(get_access_token()))
                 r.raise_for_status()
                 dataset_content = r.json()["children"]
 
@@ -2526,7 +2526,7 @@ def rename_files_stage():
                     offset = 0
                     folder_content = []
                     while True:
-                        r = requests.get(f"{PENNSIEVE_URL}/packages/{high_lvl_folder_id}?limit={limit}&offset={offset}", headers=create_request_headers(ps))
+                        r = requests.get(f"{PENNSIEVE_URL}/packages/{high_lvl_folder_id}?limit={limit}&offset={offset}", headers=create_request_headers(get_access_token()))
                         r.raise_for_status()
                         page = r.json().get("children", [])
                         folder_content.extend(page)
@@ -2550,7 +2550,7 @@ def rename_files_stage():
                     offset = 0
                     root_content = []
                     while True:
-                        r = requests.get(f"{PENNSIEVE_URL}/datasets/{dataset_id}?limit={limit}&offset={offset}", headers=create_request_headers(ps))
+                        r = requests.get(f"{PENNSIEVE_URL}/datasets/{dataset_id}?limit={limit}&offset={offset}", headers=create_request_headers(get_access_token()))
                         r.raise_for_status()
                         page = r.json().get("children", [])
                         root_content.extend(page)
@@ -2581,7 +2581,7 @@ def rename_files_stage():
                 offset = 0
                 dataset_content = []
                 while True:
-                    r = requests.get(f"{PENNSIEVE_URL}/packages/{high_lvl_folder_id}?limit={limit}&offset={offset}", headers=create_request_headers(ps))
+                    r = requests.get(f"{PENNSIEVE_URL}/packages/{high_lvl_folder_id}?limit={limit}&offset={offset}", headers=create_request_headers(get_access_token()))
                     r.raise_for_status()
                     page = r.json()["children"]
                     dataset_content.extend(page)
@@ -2598,7 +2598,7 @@ def rename_files_stage():
                         offset = 0 
 
                         while True:
-                            r = requests.get(f"{PENNSIEVE_URL}/packages/{high_lvl_folder_id}?limit={limit}&offset={offset}", headers=create_request_headers(ps))
+                            r = requests.get(f"{PENNSIEVE_URL}/packages/{high_lvl_folder_id}?limit={limit}&offset={offset}", headers=create_request_headers(get_access_token()))
                             r.raise_for_status()
                             page = r.json()["children"]
                             dataset_content.extend(page)
@@ -2631,7 +2631,7 @@ def rename_files_stage():
                                 limit = 100 
                                 offset = 0
                                 while True: 
-                                    r = requests.get(f"{PENNSIEVE_URL}/packages/{subfolder_id}", headers=create_request_headers(ps))
+                                    r = requests.get(f"{PENNSIEVE_URL}/packages/{subfolder_id}", headers=create_request_headers(get_access_token()))
                                     r.raise_for_status()
                                     page = r.json()["children"]
                                     dataset_content.extend(page)
@@ -2652,7 +2652,7 @@ def rename_files_stage():
                                     offset = 0 
                                     children = []
                                     while True: 
-                                        r = requests.get(f"{PENNSIEVE_URL}/packages/{folder_id}?limit={limit}&offset={offset}", headers=create_request_headers(ps))
+                                        r = requests.get(f"{PENNSIEVE_URL}/packages/{folder_id}?limit={limit}&offset={offset}", headers=create_request_headers(get_access_token()))
                                         r.raise_for_status()
                                         page = r.json()["children"]
                                         children.extend(page)
@@ -2669,7 +2669,7 @@ def rename_files_stage():
                                                 limit = 100
                                                 offset = 0 
                                                 while True: 
-                                                    r = requests.get(f"{PENNSIEVE_URL}/packages/{folder_id}", headers=create_request_headers(ps))
+                                                    r = requests.get(f"{PENNSIEVE_URL}/packages/{folder_id}", headers=create_request_headers(get_access_token()))
                                                     r.raise_for_status()
                                                     page = r.json()["children"]
                                                     dataset_content.extend(page)
@@ -2719,7 +2719,7 @@ def rename_files_stage():
                 if file_id != "":
                     # id was found so make api call to rename with final file name
                     try:
-                        r = requests.put(f"{PENNSIEVE_URL}/packages/{file_id}?updateStorage=true", json={"name": new_name}, headers=create_request_headers(ps))
+                        r = requests.put(f"{PENNSIEVE_URL}/packages/{file_id}?updateStorage=true", json={"name": new_name}, headers=create_request_headers(get_access_token()))
                         r.raise_for_status()
                     except Exception as e:
                         if r.status_code == 500:
@@ -2741,9 +2741,9 @@ def rename_files_stage():
                         # Use correct endpoint: /datasets/ for root-level files, /packages/ for folder files
                         while True:
                             if is_dataset_root:
-                                r = requests.get(f"{PENNSIEVE_URL}/datasets/{collection_id}?limit={limit}&offset={offset}", headers=create_request_headers(ps))
+                                r = requests.get(f"{PENNSIEVE_URL}/datasets/{collection_id}?limit={limit}&offset={offset}", headers=create_request_headers(get_access_token()))
                             else:
-                                r = requests.get(f"{PENNSIEVE_URL}/packages/{collection_id}?limit={limit}&offset={offset}", headers=create_request_headers(ps))
+                                r = requests.get(f"{PENNSIEVE_URL}/packages/{collection_id}?limit={limit}&offset={offset}", headers=create_request_headers(get_access_token()))
                             r.raise_for_status()
                             page = r.json().get("children", [])
                             dataset_content.extend(page)
@@ -2759,7 +2759,7 @@ def rename_files_stage():
                                 if file_name == file:
                                     # id was found so make api call to rename with final file name
                                     try:
-                                        r = requests.put(f"{PENNSIEVE_URL}/packages/{found_file_id}?updateStorage=true", json={"name": new_name}, headers=create_request_headers(ps))
+                                        r = requests.put(f"{PENNSIEVE_URL}/packages/{found_file_id}?updateStorage=true", json={"name": new_name}, headers=create_request_headers(get_access_token()))
                                         r.raise_for_status()
                                     except Exception as e:
                                         if r.status_code == 500:
