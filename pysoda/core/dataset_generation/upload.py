@@ -1654,7 +1654,7 @@ def build_create_folder_request(folder_name, folder_parent_id, dataset_id):
 bytes_uploaded_per_file = {}
 total_bytes_uploaded = {"value": 0}
 current_files_in_subscriber_session = 0
-
+ps = None
 
 
 bytes_file_path_dict = {}
@@ -2220,43 +2220,6 @@ def create_upload_manifest(soda, ps, ds):
     current_size_of_uploaded_files = 0
     start = timer()
     try:
-        def monitor_subscriber_progress(events_dict):
-            """
-            Monitors the progress of a subscriber and unsubscribes once the upload finishes. 
-            """
-            global files_uploaded
-            global total_bytes_uploaded
-            global bytes_uploaded_per_file
-            global main_curation_uploaded_files
-            global main_total_generate_dataset_size
-
-
-            if events_dict["type"] == 1:  # upload status: file_id, total, current, worker_id
-                file_id = events_dict["upload_status"].file_id
-                total_bytes_to_upload = events_dict["upload_status"].total
-                current_bytes_uploaded = events_dict["upload_status"].current
-
-                status = events_dict["upload_status"].status
-                if status == "2" or status == 2:
-                    ps.unsubscribe(10)
-                    logger.info("[UPLOAD COMPLETE EVENT RECEIVED]")
-                    logger.info(f"Amount of bytes uploaded via sum: {sum(bytes_uploaded_per_file.values())} vs total bytes uploaded via difference: {total_bytes_uploaded['value']}")
-                    logger.info(f"Amount of bytes Pennsieve Agent says via sum: {sum(bytes_uploaded_per_file.values())} vs amount of bytes we calculated before hand: {main_total_generate_dataset_size}")
-
-
-                # only update the byte count if the current bytes uploaded is greater than the previous bytes uploaded
-                # if current_bytes_uploaded > previous_bytes_uploaded:
-                # update the file id's current total bytes uploaded value 
-                bytes_uploaded_per_file[file_id] = current_bytes_uploaded
-                total_bytes_uploaded["value"] = sum(bytes_uploaded_per_file.values())
-
-                # check if the given file has finished uploading
-                if current_bytes_uploaded == total_bytes_to_upload and  file_id != "":
-                    files_uploaded += 1
-                    main_curation_uploaded_files += 1
-
-
-
         # Set the Pennsieve Python Client's dataset to the Pennsieve dataset that will be uploaded to.
         selected_id = ds["content"]["id"]
         ps.use_dataset(selected_id)
@@ -2777,7 +2740,52 @@ def rename_files_stage(ds):
 
                 # get the manifest id of the Pennsieve upload manifest created when uploading
   
+def monitor_subscriber_progress(events_dict):
+    """
+    Monitors the progress of a subscriber and unsubscribes once the upload finishes. 
+    """
+    global files_uploaded
+    global total_bytes_uploaded
+    global bytes_uploaded_per_file
+    global main_curation_uploaded_files
+    global main_total_generate_dataset_size
+    global ps
 
+
+    if events_dict["type"] == 1:  # upload status: file_id, total, current, worker_id
+        file_id = events_dict["upload_status"].file_id
+        total_bytes_to_upload = events_dict["upload_status"].total
+        current_bytes_uploaded = events_dict["upload_status"].current
+
+        status = events_dict["upload_status"].status
+        if status == "2" or status == 2:
+            ps.unsubscribe(10)
+            ps = None
+            logger.info("[UPLOAD COMPLETE EVENT RECEIVED]")
+            logger.info(f"Amount of bytes uploaded via sum: {sum(bytes_uploaded_per_file.values())} vs total bytes uploaded via difference: {total_bytes_uploaded['value']}")
+            logger.info(f"Amount of bytes Pennsieve Agent says via sum: {sum(bytes_uploaded_per_file.values())} vs amount of bytes we calculated before hand: {main_total_generate_dataset_size}")
+
+
+        # only update the byte count if the current bytes uploaded is greater than the previous bytes uploaded
+        # if current_bytes_uploaded > previous_bytes_uploaded:
+        # update the file id's current total bytes uploaded value 
+        bytes_uploaded_per_file[file_id] = current_bytes_uploaded
+        total_bytes_uploaded["value"] = sum(bytes_uploaded_per_file.values())
+
+        # check if the given file has finished uploading
+        if current_bytes_uploaded == total_bytes_to_upload and  file_id != "":
+            files_uploaded += 1
+            main_curation_uploaded_files += 1
+
+def start_subscriber(dataset_id, account_name):
+        global ps
+        if ps == None:
+            ps = connect_pennsieve_client(account_name)
+    
+        ps.set_dataset(dataset_id)
+        ps.subscribe(10, False, monitor_subscriber_progress)
+
+        return {"subscribe_session_started": True}
 
 main_curate_status = ""
 main_curate_print_status = ""
@@ -2818,6 +2826,8 @@ def ps_check_dataset_files_validity(soda):
         return []
 
     return []
+
+
 def check_server_access_to_files(file_list):
     # Return two lists, one that the server can open, and one that it can not.
     # This is to avoid the server trying to open files that it does not have access to.cf
