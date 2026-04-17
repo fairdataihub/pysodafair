@@ -2028,11 +2028,14 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                         if isfile(file_path):
                             if ("renamed" in file.get("action", [])):
                                 original_file_name = file.get("original-name", file_key)
+
+                                if file_key != original_file_name:
+                                    logger.info(f"list-upload-files log-delete-rename: Processing renamed file '{file_key}' with original name '{original_file_name}'")
                                 
                                 if existing_file_option == "replace":
                                     # Delete original file if it exists
                                     if original_file_name in ps_folder_children["files"]:
-                                        logger.info(f"list-upload-files log: Renaming file: Found original file '{original_file_name}' on Pennsieve. Deleting it.")
+                                        logger.info(f"list-upload-files log-delete-rename: Renaming file: Found original file '{original_file_name}' on Pennsieve. Deleting it.")
                                         my_file = ps_folder_children["files"][original_file_name]
                                         r = requests.post(f"{PENNSIEVE_URL}/data/delete", headers=create_request_headers(ps), json={"things": [f"{my_file['content']['id']}"]})
                                         r.raise_for_status()
@@ -2040,7 +2043,7 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                                     
                                     # Delete new file name if it already exists (to avoid conflicts)
                                     if file_key in ps_folder_children["files"]:
-                                        logger.info(f"list-upload-files log: Found existing file with new name '{file_key}' on Pennsieve. Deleting it to allow rename.")
+                                        logger.info(f"list-upload-files log-delete-rename: Found existing file with new name '{file_key}' on Pennsieve. Deleting it to allow rename.")
                                         my_file = ps_folder_children["files"][file_key]
                                         r = requests.post(f"{PENNSIEVE_URL}/data/delete", headers=create_request_headers(ps), json={"things": [f"{my_file['content']['id']}"]})
                                         r.raise_for_status()
@@ -2048,23 +2051,40 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                                 else:
                                     # Track the rename for later processing if original file exists and new name hasn't changed yet
                                     if original_file_name in ps_folder_children["files"] and file_key not in ps_folder_children["files"]:
-                                        logger.info(f"list-upload-files log: Renaming file: Found original file '{original_file_name}' on Pennsieve. Adding to rename list.")
+                                        logger.info(f"list-upload-files log-delete-rename: Renaming file: Found original file '{original_file_name}' on Pennsieve. Adding to rename list.")
                                         my_file = ps_folder_children["files"][original_file_name]
-                                        if my_relative_path not in list_of_files_to_rename:
-                                            list_of_files_to_rename[my_relative_path] = {}
-                                        list_of_files_to_rename[my_relative_path][original_file_name] = {
+                                        # normalize the key to match the rename-phase expectations (strip dataset root)
+                                        dataset_root = ds["content"]["name"]
+                                        logger.debug(f"normalize-key: dataset_root='{dataset_root}', my_relative_path='{my_relative_path}'")
+                                        if my_relative_path == dataset_root or my_relative_path == f"/{dataset_root}":
+                                            key = ""
+                                            logger.debug(f"normalize-key: matched dataset root; using empty key for root (key='{key}')")
+                                        elif my_relative_path.startswith(f"{dataset_root}/"):
+                                            key = my_relative_path[len(dataset_root) + 1 :]
+                                            logger.debug(f"normalize-key: stripped dataset root; normalized key='{key}'")
+                                        else:
+                                            key = my_relative_path
+                                            logger.debug(f"normalize-key: no normalization applied; key remains '{key}'")
+                                        if key not in list_of_files_to_rename:
+                                            list_of_files_to_rename[key] = {}
+                                        list_of_files_to_rename[key][original_file_name] = {
                                             "final_file_name": file_key,
-                                            "id": my_file['content']['id']
+                                            "id": my_file["content"]["id"],
                                         }
-                            else:
+                                        logger.info(f"list-upload-files log-delete-rename: Added file '{original_file_name}' to rename list with new name '{file_key}' and file_id '{my_file['content']['id']}' under path '{key}' because it is set to be renamed and the original file exists on Pennsieve.")
+                                        logger.info(f"list-upload-files log-delete-rename: Normalized relative path '{key}' structure now has keys: {list(list_of_files_to_rename[key].keys())}")
+                                    else:
+                                        # Renamed file but conditions not met for rename list - skip to prevent duplicate upload
+                                        logger.info(f"list-upload-files log-delete-rename: Renamed file '{file_key}' does not meet rename criteria - skipping to prevent duplicate upload.")
+                                        continue
+                            elif file_key in ps_folder_children["files"] and existing_file_option == "replace":
                                 # Handle non-renamed files - delete if replace option is set
-                                if file_key in ps_folder_children["files"] and existing_file_option == "replace":
-                                    logger.info(f"list-upload-files log: Found file '{file_key}' on Pennsieve for deletion")
-                                    my_file = ps_folder_children["files"][file_key]
-                                    # delete the package ( aka file ) from the dataset 
-                                    r = requests.post(f"{PENNSIEVE_URL}/data/delete", headers=create_request_headers(ps), json={"things": [f"{my_file['content']['id']}"]})
-                                    r.raise_for_status()
-                                    del ps_folder_children["files"][file_key]
+                                logger.info(f"list-upload-files log-delete-rename: Found file '{file_key}' on Pennsieve for deletion")
+                                my_file = ps_folder_children["files"][file_key]
+                                # delete the package ( aka file ) from the dataset 
+                                r = requests.post(f"{PENNSIEVE_URL}/data/delete", headers=create_request_headers(ps), json={"things": [f"{my_file['content']['id']}"]})
+                                r.raise_for_status()
+                                del ps_folder_children["files"][file_key]
 
 
                 # create list of files to be uploaded with projected and desired names saved
@@ -2088,33 +2108,58 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                         file_path = file["path"]
                         if isfile(file_path):
                             file_extension = file.get("extension", splitext(file_path)[1])
+                            logger.debug(f"list-upload-files log: Processing file '{file_key}' from location '{file.get('location')}' with path '{file_path}'")
+                            logger.debug(f"list-upload-files log: File extension determined as '{file_extension}'")
 
                             initial_name = None
                             initial_name_with_extension = None
                             desired_name_with_extension = None
                             if ("renamed" in file.get("action", [])):
+                                logger.debug(f"list-upload-files log: File '{file_key}' is marked as renamed - processing rename logic")
                                 # Remove the extension from the original name using file_extension
                                 initial_name_with_extension = file.get("original-name", file_key)
+                                logger.debug(f"list-upload-files log: Original file name (before rename) '{initial_name_with_extension}'")
                                 if initial_name_with_extension.endswith(file_extension):
                                     initial_name = initial_name_with_extension[: -len(file_extension)]
+                                    logger.debug(f"list-upload-files log: Initial name without extension: '{initial_name}' (removed extension '{file_extension}')")
                                 else:
                                     initial_name = splitext(initial_name_with_extension)[0]
+                                    logger.debug(f"list-upload-files log: Initial name without extension: '{initial_name}' (using splitext)")
                                 desired_name_with_extension = file_key
+                                logger.debug(f"list-upload-files log: Desired name (after rename) '{desired_name_with_extension}'")
                             else:
+                                logger.debug(f"list-upload-files log: File '{file_key}' is NOT renamed - processing standard file logic")
                                 #logic for non-renamed files
                                 initial_name = file_key[: -len(file_extension)] if file_key.endswith(file_extension) else splitext(basename(file_path))[0]
                                 initial_name_with_extension = basename(file_path)
                                 desired_name_with_extension = file_key
+                                logger.debug(f"list-upload-files log: Initial name without extension: '{initial_name}'")
+                                logger.debug(f"list-upload-files log: Initial name with extension: '{initial_name_with_extension}'")
+                                logger.debug(f"list-upload-files log: Desired name: '{desired_name_with_extension}'")
                             
-                            logger.info(f"list-upload-files log: Processing file '{file_key}' with initial name '{initial_name_with_extension}' and desired name '{desired_name_with_extension}'")
+                            logger.debug(f"list-upload-files log: Processing file '{file_key}' with initial name '{initial_name_with_extension}' and desired name '{desired_name_with_extension}'")
+                            
+                            # Skip file if it's already tracked for renaming - the rename logic will handle uploading it with the original name
+                            # Normalize the key the same way we do when inserting into list_of_files_to_rename
+                            dataset_root = ds["content"]["name"]
+                            if my_relative_path == dataset_root or my_relative_path == f"/{dataset_root}":
+                                lookup_key = ""
+                            elif my_relative_path.startswith(f"{dataset_root}/"):
+                                lookup_key = my_relative_path[len(dataset_root) + 1 :]
+                            else:
+                                lookup_key = my_relative_path
+                            logger.debug(f"lookup-key: my_relative_path='{my_relative_path}' -> lookup_key='{lookup_key}'")
+                            if lookup_key in list_of_files_to_rename and initial_name_with_extension in list_of_files_to_rename[lookup_key]:
+                                logger.info(f"list-upload-files log: File '{file_key}' (originally '{initial_name_with_extension}') is tracked in list_of_files_to_rename under path '{lookup_key}' - skipping upload here as rename logic will handle it")
+                                continue
                             
                             # Skip file if skip option is set and the desired name already exists on Pennsieve
                             if existing_file_option != "replace" and desired_name_with_extension in my_bf_existing_files_name_with_extension:
-                                logger.info(f"list-upload-files log: File '{desired_name_with_extension}' already exists on Pennsieve and skip option is set - file will not be uploaded")
+                                logger.info(f"list-upload-files log: File '{desired_name_with_extension}' already exists on Pennsieve and skip option is set (existing_file_option='{existing_file_option}') - file will not be uploaded")
                                 continue
 
-
-                            logger.info(f"list-upload-files log: File '{file_key}' added to list_local_files with projected_name: '{initial_name_with_extension}', final_name: '{desired_name_with_extension}'")
+                            file_size = getsize(file_path)
+                            logger.info(f"list-upload-files: queued for upload: '{file_key}' as '{desired_name_with_extension}' ({file_size} bytes)")
                             list_local_files.append(file_path)
                             list_projected_names.append(initial_name_with_extension)
                             list_desired_names.append(desired_name_with_extension)
@@ -2124,7 +2169,8 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                             my_bf_existing_files_name_with_extension.append(desired_name_with_extension)
 
                             # add to projected dataset size to be generated
-                            main_total_generate_dataset_size += getsize(file_path)
+                            main_total_generate_dataset_size += file_size
+                            logger.debug(f"list-upload-files log: Updated total dataset size. New total: {main_total_generate_dataset_size} bytes")
 
                 if list_local_files:
                     ds_name = soda["ps-dataset-selected"]["dataset-name"]
@@ -2238,6 +2284,7 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                 )
 
                 logger.info(f"Amount of files to upload: {len(list_upload_files)} ")
+                logger.info(f"Amount of files to rename: {len(list_of_files_to_rename)} ")
 
 
                 # return and mark upload as completed if nothing is added to the manifest and there are no files to rename
@@ -2689,7 +2736,10 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
             for relative_path in list_of_files_to_rename:
                 # Check if "id" exists for this path (may not exist if not yet set)
                 if "id" not in list_of_files_to_rename[relative_path]:
-                    logger.warning(f"No 'id' key found for relative_path '{relative_path}', skipping...")
+                    logger.warning(f"No 'id' key found for relative_path '{relative_path}'")
+                    logger.warning(f"  Structure for this path: {list_of_files_to_rename[relative_path].keys()}")
+                    logger.warning(f"  Files to rename: {[k for k in list_of_files_to_rename[relative_path].keys() if k not in ['id', 'high_lvl_folder']]}")
+                    logger.warning(f"  Skipping this relative_path and its files from renaming...")
                     continue
                 
                 collection_id = list_of_files_to_rename[relative_path]["id"]
