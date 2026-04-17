@@ -268,7 +268,6 @@ TEMPLATE_PATH = DEV_TEMPLATE_PATH if exists(DEV_TEMPLATE_PATH) else PROD_TEMPLAT
 
 
 
-ums = UploadManifestSession()
 
 
 
@@ -2319,7 +2318,6 @@ def create_upload_manifest(soda, ps, ds):
         manifest_id = manifest_data.manifest_id
 
 
-        ums.set_df_mid(manifest_id)
 
         # remove the item just added to the manifest 
         list_upload_files[0][0].pop(0)
@@ -2389,11 +2387,6 @@ def create_upload_manifest(soda, ps, ds):
                 # add the file to the manifest
                 ps.manifest.add(manifest_file_path, "/", manifest_id)
 
-        
-        # set rename files to ums for upload resuming if this upload fails
-        if renamed_files_counter > 0:
-            ums.set_list_of_files_to_rename(list_of_files_to_rename)
-            ums.set_rename_total_files(renamed_files_counter)
 
 
         # wait for all of the Agent's processes to finish to avoid errors when deleting files on Windows
@@ -2955,10 +2948,6 @@ def uploading_with_ps_account(soda):
 def uploading_to_existing_ps_dataset(soda):
     return (soda.get("starting-point") is not None and soda["starting-point"].get("origin") == "ps")
 
-def can_resume_prior_upload(resume_status):
-    global ums 
-    return resume_status and ums.df_mid_has_progress()
-
 def generate_options_set(soda):
     return "generate-dataset" in soda.keys()
 
@@ -3173,7 +3162,6 @@ def reset_upload_session_environment(resume):
     global main_initial_bfdataset_size
     global main_curation_uploaded_files
     global uploaded_folder_counter
-    global ums
 
     global myds
     global generated_dataset_id
@@ -3201,18 +3189,9 @@ def reset_upload_session_environment(resume):
     main_generate_destination = ""
     main_initial_bfdataset_size = 0
 
-    if not resume:
-        ums.set_df_mid(None)
-        ums.set_elapsed_time(None)
-        ums.set_total_files_to_upload(0)
-        ums.set_main_total_generate_dataset_size(0)
-        # reset the rename information back to default
-        ums.set_renaming_files_flow(False) # this determines if we failed while renaming files after the upload is complete
-        ums.set_rename_total_files(None)
-        ums.set_list_of_files_to_rename(None)
-        renaming_files_flow = False
-        # reset the calculated values for the upload session
-        bytes_file_path_dict = {}
+    renaming_files_flow = False
+    # reset the calculated values for the upload session
+    bytes_file_path_dict = {}
 
 
 
@@ -3269,16 +3248,12 @@ def main_curate_function_progress():
     global total_bytes_uploaded # current number of bytes uploaded to Pennsieve in the upload session
     global myds
     global renaming_files_flow
-    global ums 
     global elapsed_time
     global curation_error_message
 
 
-    prior_elapsed_time = ums.get_elapsed_time()
-    if prior_elapsed_time is not None: 
-        elapsed_time =  ( time.time() - generate_start_time ) + prior_elapsed_time
-    else:
-        elapsed_time = time.time() - generate_start_time
+
+    elapsed_time = time.time() - generate_start_time
 
     elapsed_time_formatted = time_format(elapsed_time)
 
