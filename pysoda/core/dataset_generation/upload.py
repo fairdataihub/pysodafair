@@ -2991,7 +2991,7 @@ def generate_new_ds_ps(soda, dataset_name, ps):
     return myds
 
 
-def manifest_file_factory(soda, resume, ps):
+def manifest_file_factory(soda, ps):
     global main_generate_destination
     global main_total_generate_dataset_size
 
@@ -3030,7 +3030,7 @@ def manifest_file_factory(soda, resume, ps):
                 raise Exception(f"{e.status_code}, {e.message}")
         myds = get_dataset_with_backoff(selected_dataset_id)
     
-        ps_upload_to_dataset(soda, ps, myds, resume)
+        return create_upload_manifest(soda, ps, myds)
 
                         
                 
@@ -3207,7 +3207,7 @@ def reset_upload_session_environment(resume):
 
 
 
-def create_upload_manifest_pipeline(soda, resume):
+def create_upload_manifest_pipeline(soda):
     global logger
     global main_curate_status
     global manifest_id 
