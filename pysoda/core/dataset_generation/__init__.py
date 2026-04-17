@@ -1,6 +1,6 @@
 from .upload import (
     check_empty_files_folders,
-    main_curate_function,
+    create_upload_manifest_pipeline,
     main_curate_function_progress,
     generate_manifest_file_locally,
     generate_manifest_file_data,
