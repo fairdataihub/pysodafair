@@ -2283,8 +2283,27 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                     relative_path,
                 )
 
+                # Recompute number of files to rename from the rename map (exclude metadata keys)
+                if list_of_files_to_rename:
+                    files_to_rename_count = sum(
+                        1
+                        for info in list_of_files_to_rename.values()
+                        for k in info.keys()
+                        if k not in ("id", "high_lvl_folder")
+                    )
+                    logger.info(f"Recomputed files_to_rename_count from list_of_files_to_rename: {files_to_rename_count}")
+                else:
+                    logger.info("No files to rename found in list_of_files_to_rename.")
+                    files_to_rename_count = 0
+
+                renamed_files_counter = files_to_rename_count
+                # set expected total generate size to number of files to rename when there are no uploads
+                if len(list_upload_files) < 1:
+                    main_total_generate_dataset_size = renamed_files_counter
+
                 logger.info(f"Amount of files to upload: {len(list_upload_files)} ")
-                logger.info(f"Amount of files to rename: {len(list_of_files_to_rename)} ")
+                logger.info(f"Amount of files to rename: {files_to_rename_count} ")
+                logger.info(f"list_of_files_to_rename: {list_of_files_to_rename} ")
 
 
                 # return and mark upload as completed if nothing is added to the manifest and there are no files to rename
@@ -2310,10 +2329,16 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
 
         # 2. Count how many files will be uploaded to inform frontend - do not count if we are resuming a previous upload that has made progress
         if not resume or resume and not ums.df_mid_has_progress():
+            # Log count and contents of upload list to aid debugging of resume logic
+            logger.info(f"list-upload-files: count={len(list_upload_files)}")
+            logger.debug(f"list-upload-files: content={list_upload_files}")
+
             for folderInformation in list_upload_files:
                 file_paths_count = len(folderInformation[0])
                 total_files += file_paths_count
                 total_dataset_files += file_paths_count
+        else:
+            logger.info("list-upload-files: Resuming upload with existing progress, skipping recount of files to upload")
 
 
         # 3. Upload files and add to tracking list
@@ -2361,7 +2386,7 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
             list_of_files_to_rename = ums.get_list_of_files_to_rename()
             renamed_files_counter = ums.get_rename_total_files()
         # create a manifest for files - IMP: We use a single file to start with since creating a manifest requires a file path.  We need to remove this at the end. 
-        elif len(list_upload_files) > 0:
+        elif len(list_upload_files) > 0 or len(list_of_files_to_rename) > 0:
             main_curate_progress_message = ("Queuing dataset files for upload with the Pennsieve Agent..." + "<br>" + "This may take some time.")
 
             first_file_local_path = list_upload_files[0][0][0]
@@ -2737,9 +2762,6 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                 # Check if "id" exists for this path (may not exist if not yet set)
                 if "id" not in list_of_files_to_rename[relative_path]:
                     logger.warning(f"No 'id' key found for relative_path '{relative_path}'")
-                    logger.warning(f"  Structure for this path: {list_of_files_to_rename[relative_path].keys()}")
-                    logger.warning(f"  Files to rename: {[k for k in list_of_files_to_rename[relative_path].keys() if k not in ['id', 'high_lvl_folder']]}")
-                    logger.warning(f"  Skipping this relative_path and its files from renaming...")
                     continue
                 
                 collection_id = list_of_files_to_rename[relative_path]["id"]
