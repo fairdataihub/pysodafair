@@ -1861,6 +1861,7 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
             """
             global main_total_generate_dataset_size
             global bytes_file_path_dict
+            global list_of_files_to_rename
             # First loop will take place in the root of the dataset
             if "folders" in dataset_structure.keys():
                 for folder_key, folder in dataset_structure["folders"].items():
@@ -1877,6 +1878,29 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                     # relative_path = generate_relative_path(my_relative_path, file_key)
                     file_path = file["path"]
                     if isfile(file_path) and file.get("location") == "local":
+                        # Check if file is marked as renamed
+                        if "renamed" in file.get("action", []):
+                            original_file_name = file.get("original-name", file_key)
+                            if file_key != original_file_name:
+                                # For brand-new datasets, add renamed files to list_of_files_to_rename
+                                # These will be renamed after upload
+                                dataset_root = ds["content"]["name"]
+                                if my_relative_path == dataset_root or my_relative_path == f"/{dataset_root}":
+                                    key = ""
+                                elif my_relative_path.startswith(f"{dataset_root}/"):
+                                    key = my_relative_path[len(dataset_root) + 1 :]
+                                else:
+                                    key = my_relative_path
+                                
+                                if key not in list_of_files_to_rename:
+                                    list_of_files_to_rename[key] = {"high_lvl_folder": key.split("/")[0] if key else ""}
+                                
+                                list_of_files_to_rename[key][original_file_name] = {
+                                    "final_file_name": file_key,
+                                    "id": "",  # Will be set during rename phase
+                                }
+                                logger.info(f"list-upload-files log-delete-rename: Brand-new dataset - marked file '{original_file_name}' for rename to '{file_key}' under path '{key}'")
+                        
                         projected_name = splitext(basename(file_path))[0]
                         projected_name_w_extension = basename(file_path)
                         desired_name = splitext(file_key)[0]
@@ -2255,6 +2279,19 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                 brand_new_dataset = True
                 list_upload_files = recursive_dataset_scan_for_new_upload(dataset_structure, list_upload_files, relative_path)
                 
+            # For brand-new datasets, compute renamed_files_counter from any files marked as renamed
+            if list_of_files_to_rename:
+                renamed_files_counter = sum(
+                    1
+                    for info in list_of_files_to_rename.values()
+                    for k in info.keys()
+                    if k not in ("id", "high_lvl_folder")
+                )
+                logger.info(f"Brand-new dataset: Recomputed renamed_files_counter from list_of_files_to_rename: {renamed_files_counter}")
+            else:
+                renamed_files_counter = 0
+                logger.info("Brand-new dataset: No files to rename found in list_of_files_to_rename")
+            
             # For brand new datasets, no existing files to check - upload all metadata files
             logger.info("ps_upload_to_dataset: Creating metadata files for brand new dataset (no existing file checks needed)")
             create_metadata_files_for_upload(soda, list_upload_metadata_files)
@@ -2391,37 +2428,19 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
 
             first_file_local_path = list_upload_files[0][0][0]
 
+            # Compute folder_name for the manifest.create call
             if brand_new_dataset:
                 first_relative_path = list_upload_files[0][4]
-                first_final_name = list_upload_files[0][2][0]
             else:
                 first_relative_path = list_upload_files[0][6]
-                first_final_name = list_upload_files[0][4][0]
 
-            # Extract folder_name (subfolder path) and high_lvl_folder from relative_path
+            # Extract folder_name from relative_path (subfolder path under the dataset)
             try:
                 slash_idx = first_relative_path.index("/")
                 folder_name = first_relative_path[slash_idx+1:]
-                first_high_lvl_folder = first_relative_path[:slash_idx]
             except ValueError:
-                # No slash in path - entire path is the high-level folder, no subfolders
+                # No slash means we're at high-level folder
                 folder_name = ""
-                first_high_lvl_folder = first_relative_path
-
-            if first_final_name != basename(first_file_local_path):
-                # if file name is not the same as local path, then it has been renamed in SODA
-                if folder_name not in list_of_files_to_rename:
-                    list_of_files_to_rename[folder_name] = {"high_lvl_folder": first_high_lvl_folder}
-                else:
-                    # Entry exists but may not have high_lvl_folder set
-                    if "high_lvl_folder" not in list_of_files_to_rename[folder_name]:
-                        list_of_files_to_rename[folder_name]["high_lvl_folder"] = first_high_lvl_folder
-                if basename(first_file_local_path) not in list_of_files_to_rename[folder_name]:
-                    list_of_files_to_rename[folder_name][basename(first_file_local_path)] = {
-                        "final_file_name": first_final_name,
-                        "id": "",
-                    }
-                    renamed_files_counter += 1
 
             manifest_data = ps.manifest.create(first_file_local_path, folder_name)
             manifest_id = manifest_data.manifest_id
@@ -2444,39 +2463,20 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                     list_file_paths = folderInformation[0]
                     if brand_new_dataset:
                         relative_path = folderInformation[4]
-                        final_file_name_list = folderInformation[2]
                     else:
                         relative_path = folderInformation[6]
-                        final_file_name_list = folderInformation[4]
                     # get the substring from the string relative_path that starts at the index of the / and contains the rest of the string
                     try:
                         slash_idx = relative_path.index("/")
                         folder_name = relative_path[slash_idx+1:]
-                        high_lvl_folder = relative_path[:slash_idx]
                     except ValueError as e:
                         # No slash in path - entire path is the high-level folder, no subfolders
                         folder_name = ""
-                        high_lvl_folder = relative_path
 
                     # Add files to manfiest"
                     final_files_index = 1 if index_skip else 0
                     index_skip = False
                     for file_path in list_file_paths:
-                        file_file_name = final_file_name_list[final_files_index]
-                        if file_file_name != basename(file_path):
-                            # save the relative path, final name and local path of the file to be renamed
-                            if folder_name not in list_of_files_to_rename:
-                                list_of_files_to_rename[folder_name] = {"high_lvl_folder": high_lvl_folder}
-                            else:
-                                # Entry exists but may not have high_lvl_folder set
-                                if "high_lvl_folder" not in list_of_files_to_rename[folder_name]:
-                                    list_of_files_to_rename[folder_name]["high_lvl_folder"] = high_lvl_folder
-                            if basename(file_path) not in list_of_files_to_rename[folder_name]:
-                                renamed_files_counter += 1
-                                list_of_files_to_rename[folder_name][basename(file_path)] = {
-                                    "final_file_name": file_file_name,
-                                    "id": "",
-                                }
                         ps.manifest.add(file_path, folder_name, manifest_id)
                         final_files_index += 1
 
@@ -2518,7 +2518,7 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
 
 
         # wait for all of the Agent's processes to finish to avoid errors when deleting files on Windows
-        time.sleep(1)
+        time.sleep(5)
 
         # 6. Rename files
         if list_of_files_to_rename:
