@@ -2072,6 +2072,29 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                                         r = requests.post(f"{PENNSIEVE_URL}/data/delete", headers=create_request_headers(ps), json={"things": [f"{my_file['content']['id']}"]})
                                         r.raise_for_status()
                                         del ps_folder_children["files"][file_key]
+
+                                    # After deleting the original file, add the rename info to list_of_files_to_rename so it gets renamed after upload
+                                    try:
+                                        dataset_root = ds["content"]["name"]
+                                        if my_relative_path == dataset_root or my_relative_path == f"/{dataset_root}":
+                                            key = ""
+                                        elif my_relative_path.startswith(f"{dataset_root}/"):
+                                            key = my_relative_path[len(dataset_root) + 1 :]
+                                        else:
+                                            key = my_relative_path
+
+                                        if key not in list_of_files_to_rename:
+                                            list_of_files_to_rename[key] = {"high_lvl_folder": key.split("/")[0] if key else ""}
+
+                                        # placeholder id will be populated after upload completes
+                                        list_of_files_to_rename[key][original_file_name] = {
+                                            "final_file_name": file_key,
+                                            "id": "",
+                                        }
+                                        logger.info(f"list-upload-files log-delete-rename: Scheduled placeholder rename for '{original_file_name}' -> '{file_key}' under path '{key}'")
+                                    except Exception:
+                                        logger.debug("list-upload-files log-delete-rename: Failed to schedule placeholder rename entry; continuing")
+
                                 else:
                                     # Track the rename for later processing if original file exists and new name hasn't changed yet
                                     if original_file_name in ps_folder_children["files"] and file_key not in ps_folder_children["files"]:
@@ -2190,6 +2213,7 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                             
                             logger.debug(f"list-upload-files log: Processing file '{file_key}' with initial name '{initial_name_with_extension}' and desired name '{desired_name_with_extension}'")
                             
+                            
                             # Skip file if it's already tracked for renaming - the rename logic will handle uploading it with the original name
                             # Normalize the key the same way we do when inserting into list_of_files_to_rename
                             dataset_root = ds["content"]["name"]
@@ -2200,7 +2224,7 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                             else:
                                 lookup_key = my_relative_path
                             logger.debug(f"lookup-key: my_relative_path='{my_relative_path}' -> lookup_key='{lookup_key}'")
-                            if lookup_key in list_of_files_to_rename and initial_name_with_extension in list_of_files_to_rename[lookup_key]:
+                            if lookup_key in list_of_files_to_rename and initial_name_with_extension in list_of_files_to_rename[lookup_key] and existing_file_option != "replace":
                                 logger.info(f"list-upload-files log: File '{file_key}' (originally '{initial_name_with_extension}') is tracked in list_of_files_to_rename under path '{lookup_key}' - skipping upload here as rename logic will handle it")
                                 continue
                             
@@ -2224,6 +2248,7 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                             logger.debug(f"list-upload-files log: Updated total dataset size. New total: {main_total_generate_dataset_size} bytes")
 
                 if list_local_files:
+                    logger.info(f"list-upload-files: Adding {len(list_local_files)} files under path '{my_relative_path}' to upload list with projected names {list_projected_names} and desired names {list_desired_names}")
                     ds_name = soda["ps-dataset-selected"]["dataset-name"]
                     list_upload_files.append(
                         [
