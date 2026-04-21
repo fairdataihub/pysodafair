@@ -2098,9 +2098,36 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                                         logger.info(f"list-upload-files log-delete-rename: Added file '{original_file_name}' to rename list with new name '{file_key}' and file_id '{my_file['content']['id']}' under path '{key}' because it is set to be renamed and the original file exists on Pennsieve.")
                                         logger.info(f"list-upload-files log-delete-rename: Normalized relative path '{key}' structure now has keys: {list(list_of_files_to_rename[key].keys())}")
                                     else:
-                                        # Renamed file but conditions not met for rename list - skip to prevent duplicate upload
-                                        logger.info(f"list-upload-files log-delete-rename: Renamed file '{file_key}' does not meet rename criteria - skipping to prevent duplicate upload.")
-                                        continue
+                                        # If the original exists on Pennsieve, ensure it is slated for renaming
+                                        if original_file_name in ps_folder_children:
+                                            logger.info(f"list-upload-files log-delete-rename: Original file '{original_file_name}' exists on Pennsieve; adding to rename list to avoid re-upload.")
+                                            my_file = ps_folder_children[original_file_name]
+                                            dataset_root = ds["content"]["name"]
+                                            logger.debug(f"normalize-key: dataset_root='{dataset_root}', my_relative_path='{my_relative_path}'")
+                                            if my_relative_path == dataset_root or my_relative_path == f"/{dataset_root}":
+                                                key = ""
+                                                logger.debug(f"normalize-key: matched dataset root; using empty key for root (key='{key}')")
+                                            elif my_relative_path.startswith(f"{dataset_root}/"):
+                                                key = my_relative_path[len(dataset_root) + 1 :]
+                                                logger.debug(f"normalize-key: stripped dataset root; normalized key='{key}'")
+                                            else:
+                                                key = my_relative_path
+                                                logger.debug(f"normalize-key: no normalization applied; key remains '{key}'")
+                                            if key not in list_of_files_to_rename:
+                                                list_of_files_to_rename[key] = {}
+                                            list_of_files_to_rename[key][original_file_name] = {
+                                                "final_file_name": file_key,
+                                                "id": my_file["content"]["id"],
+                                            }
+                                            logger.info(f"list-upload-files log-delete-rename: Added file '{original_file_name}' to rename list with new name '{file_key}' and file_id '{my_file['content']['id']}' under path '{key}' (fallback path) to avoid re-upload.")
+                                            logger.info(f"list-upload-files log-delete-rename: Normalized relative path '{key}' structure now has keys: {list(list_of_files_to_rename[key].keys())}")
+                                            # continue so later upload logic sees this file in rename map and skips upload
+                                            continue
+                                        # If only the target name exists on Pennsieve, skip upload (nothing to do)
+                                        if file_key in ps_folder_children:
+                                            logger.info(f"list-upload-files log-delete-rename: Target file name '{file_key}' already exists on Pennsieve; skipping upload/rename to avoid duplicate.")
+                                            continue
+                                        # Otherwise, allow the later upload logic to handle this file (no rename info available)
                             elif file_key in ps_folder_children["files"] and existing_file_option == "replace":
                                 # Handle non-renamed files - delete if replace option is set
                                 logger.info(f"list-upload-files log-delete-rename: Found file '{file_key}' on Pennsieve for deletion")
