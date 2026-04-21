@@ -2242,7 +2242,12 @@ def create_upload_manifest(soda, ps, ds):
             # we can assume no files/folders exist in the dataset since the generate option is new and starting point is also new
             # therefore, we can assume the dataset structure is the same as the tracking structure
             brand_new_dataset = True
-            list_upload_files = create_upload_information_new(soda, ps, relative_path)
+            info = create_upload_information_new(soda, ps, relative_path)
+            list_upload_files = info["list_upload_files"]
+            list_upload_metadata_files = info["list_upload_metadata_files"]
+            main_total_generate_dataset_size = info["main_total_generate_dataset_size"]
+            total_files = info["total_files"]
+            total_metadata_files = info["total_metadata_files"]
                 
             # For brand new datasets, no existing files to check - upload all metadata files
             logger.info("ps_upload_to_dataset: Creating metadata files for brand new dataset (no existing file checks needed)")
@@ -2276,6 +2281,9 @@ def create_upload_manifest(soda, ps, ds):
             # TODO: Add information showing nothing added and no manifest created or maybe even just throw a 400 error
             logger.info("Manifest creation: Failed 0 files added to dataset.")
             raise EmptyDatasetError("The dataset you are trying to upload is empty.")
+
+
+        logger.info(f"The upload file list is: {list_upload_files}")
         
         
         main_curate_progress_message = ("Queuing dataset files for upload with the Pennsieve Agent..." + "<br>" + "This may take some time.")
