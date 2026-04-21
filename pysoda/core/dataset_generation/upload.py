@@ -2635,7 +2635,7 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                 while not content and attempt < max_wait_iterations:
                     attempt += 1
                     logger.debug(f"Content empty, waiting... (attempt {attempt}/{max_wait_iterations})")
-                    time.sleep(3)
+                    time.sleep(10)
                     content = fetch_paginated_content(endpoint_url)
                 return content
 
