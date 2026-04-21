@@ -2242,7 +2242,7 @@ def create_upload_manifest(soda, ps, ds):
             # we can assume no files/folders exist in the dataset since the generate option is new and starting point is also new
             # therefore, we can assume the dataset structure is the same as the tracking structure
             brand_new_dataset = True
-            list_upload_files = create_upload_information_new(soda, relative_path)
+            list_upload_files = create_upload_information_new(soda, ps, relative_path)
                 
             # For brand new datasets, no existing files to check - upload all metadata files
             logger.info("ps_upload_to_dataset: Creating metadata files for brand new dataset (no existing file checks needed)")
