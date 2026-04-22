@@ -2130,7 +2130,7 @@ def create_upload_information_existing(soda, dataset_structure, ds, ps, relative
     # we will need a tracking structure to compare against
     tracking_json_structure = ds
     normalize_tracking_folder(tracking_json_structure)
-    recursive_create_folder_for_ps(dataset_structure, tracking_json_structure, existing_folder_option, ps)
+    recursive_create_folder_for_ps(dataset_structure, tracking_json_structure, existing_folder_option)
     list_upload_files, main_total_generate_dataset_size = recursive_dataset_scan_for_ps(
         dataset_structure,
         tracking_json_structure,
