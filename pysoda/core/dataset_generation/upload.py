@@ -425,6 +425,7 @@ def check_empty_files_folders(soda):
         error: error message with list of non valid local data files, if any
     """
     try:
+
         def recursive_empty_files_check(my_folder, my_relative_path, error_files):
             for folder_key, folder in my_folder["folders"].items():
                 relative_path = my_relative_path + "/" + folder_key
@@ -515,6 +516,15 @@ def check_empty_files_folders(soda):
 
     except Exception as e:
         raise e
+
+
+def normalize_relative_key(dataset_root, my_relative_path):
+    if my_relative_path == dataset_root or my_relative_path == f"/{dataset_root}":
+        return ""
+    elif my_relative_path.startswith(f"{dataset_root}/"):
+        return my_relative_path[len(dataset_root) + 1 :]
+    else:
+        return my_relative_path
 
 
 def check_local_dataset_files_validity(soda):
@@ -1844,7 +1854,6 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
     start = timer()
     try:
 
-
         def recursive_dataset_scan_for_new_upload(dataset_structure, list_upload_files, my_relative_path):
             """
             This function recursively gathers the files and folders in the dataset that will be uploaded to Pennsieve.
@@ -1885,12 +1894,7 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                                 # For brand-new datasets, add renamed files to list_of_files_to_rename
                                 # These will be renamed after upload
                                 dataset_root = ds["content"]["name"]
-                                if my_relative_path == dataset_root or my_relative_path == f"/{dataset_root}":
-                                    key = ""
-                                elif my_relative_path.startswith(f"{dataset_root}/"):
-                                    key = my_relative_path[len(dataset_root) + 1 :]
-                                else:
-                                    key = my_relative_path
+                                key = normalize_relative_key(dataset_root, my_relative_path)
                                 
                                 if key not in list_of_files_to_rename:
                                     list_of_files_to_rename[key] = {"high_lvl_folder": key.split("/")[0] if key else ""}
@@ -2038,7 +2042,6 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                     )
 
             if "files" in my_folder.keys(): 
-
                 # delete files to be deleted
                 (
                     my_bf_existing_files_name,
@@ -2076,12 +2079,7 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                                     # After deleting the original file, add the rename info to list_of_files_to_rename so it gets renamed after upload
                                     try:
                                         dataset_root = ds["content"]["name"]
-                                        if my_relative_path == dataset_root or my_relative_path == f"/{dataset_root}":
-                                            key = ""
-                                        elif my_relative_path.startswith(f"{dataset_root}/"):
-                                            key = my_relative_path[len(dataset_root) + 1 :]
-                                        else:
-                                            key = my_relative_path
+                                        key = normalize_relative_key(dataset_root, my_relative_path)
 
                                         if key not in list_of_files_to_rename:
                                             list_of_files_to_rename[key] = {"high_lvl_folder": key.split("/")[0] if key else ""}
@@ -2092,8 +2090,8 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                                             "id": "",
                                         }
                                         logger.info(f"list-upload-files log-delete-rename: Scheduled placeholder rename for '{original_file_name}' -> '{file_key}' under path '{key}'")
-                                    except Exception:
-                                        logger.debug("list-upload-files log-delete-rename: Failed to schedule placeholder rename entry; continuing")
+                                    except Exception as e:
+                                        logger.exception("list-upload-files log-delete-rename: Failed to schedule placeholder rename entry; continuing")
 
                                 else:
                                     # Track the rename for later processing if original file exists and new name hasn't changed yet
@@ -2122,20 +2120,12 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                                         logger.info(f"list-upload-files log-delete-rename: Normalized relative path '{key}' structure now has keys: {list(list_of_files_to_rename[key].keys())}")
                                     else:
                                         # If the original exists on Pennsieve, ensure it is slated for renaming
-                                        if original_file_name in ps_folder_children:
+                                        if original_file_name in ps_folder_children["files"]:
                                             logger.info(f"list-upload-files log-delete-rename: Original file '{original_file_name}' exists on Pennsieve; adding to rename list to avoid re-upload.")
-                                            my_file = ps_folder_children[original_file_name]
+                                            my_file = ps_folder_children["files"][original_file_name]
                                             dataset_root = ds["content"]["name"]
                                             logger.debug(f"normalize-key: dataset_root='{dataset_root}', my_relative_path='{my_relative_path}'")
-                                            if my_relative_path == dataset_root or my_relative_path == f"/{dataset_root}":
-                                                key = ""
-                                                logger.debug(f"normalize-key: matched dataset root; using empty key for root (key='{key}')")
-                                            elif my_relative_path.startswith(f"{dataset_root}/"):
-                                                key = my_relative_path[len(dataset_root) + 1 :]
-                                                logger.debug(f"normalize-key: stripped dataset root; normalized key='{key}'")
-                                            else:
-                                                key = my_relative_path
-                                                logger.debug(f"normalize-key: no normalization applied; key remains '{key}'")
+                                            key = normalize_relative_key(dataset_root, my_relative_path)
                                             if key not in list_of_files_to_rename:
                                                 list_of_files_to_rename[key] = {}
                                             list_of_files_to_rename[key][original_file_name] = {
@@ -2147,7 +2137,7 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                                             # continue so later upload logic sees this file in rename map and skips upload
                                             continue
                                         # If only the target name exists on Pennsieve, skip upload (nothing to do)
-                                        if file_key in ps_folder_children:
+                                        if file_key in ps_folder_children["files"]:
                                             logger.info(f"list-upload-files log-delete-rename: Target file name '{file_key}' already exists on Pennsieve; skipping upload/rename to avoid duplicate.")
                                             continue
                                         # Otherwise, allow the later upload logic to handle this file (no rename info available)
