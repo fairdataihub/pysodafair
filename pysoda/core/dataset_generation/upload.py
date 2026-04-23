@@ -2059,6 +2059,12 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                                 if file_key != original_file_name:
                                     logger.info(f"list-upload-files log-delete-rename: Processing renamed file '{file_key}' with original name '{original_file_name}'")
                                 
+                                # Handle the case where the existing_file_option is "replace" - we want to delete the
+                                # original file on Pennsieve if it exists and then add the renamed file to the upload list
+                                # with the new name. This is because if we leave the original file there and try to rename
+                                # it, we will have a conflict since the original file is still there with the old name.
+                                # By deleting it first, we can avoid this conflict and ensure that the renamed file gets
+                                # uploaded with the new name without any issues.
                                 if existing_file_option == "replace":
                                     # Delete original file if it exists
                                     if original_file_name in ps_folder_children["files"]:
@@ -2092,11 +2098,12 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                                         logger.info(f"list-upload-files log-delete-rename: Scheduled placeholder rename for '{original_file_name}' -> '{file_key}' under path '{key}'")
                                     except Exception as e:
                                         logger.exception("list-upload-files log-delete-rename: Failed to schedule placeholder rename entry; continuing")
-
+                                # Handle the case for existing_file_option is not "replace" 
                                 else:
-                                    # Track the rename for later processing if original file exists and new name hasn't changed yet
-                                    if original_file_name in ps_folder_children["files"] and file_key not in ps_folder_children["files"]:
-                                        logger.info(f"list-upload-files log-delete-rename: Renaming file: Found original file '{original_file_name}' on Pennsieve. Adding to rename list.")
+                                    # 1) If the original exists on Pennsieve, add mapping with the file's id and skip uploading the local file.
+                                    # 2) If the target (new) name exists on Pennsieve, skip (nothing to do).
+                                    # 3) Otherwise, schedule a placeholder rename (id = "") so the uploaded file can be renamed later.
+                                    if original_file_name in ps_folder_children["files"]:
                                         my_file = ps_folder_children["files"][original_file_name]
                                         dataset_root = ds["content"]["name"]
                                         key = normalize_relative_key(dataset_root, my_relative_path)
@@ -2106,29 +2113,26 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                                             "final_file_name": file_key,
                                             "id": my_file["content"]["id"],
                                         }
-                                        logger.info(f"list-upload-files log-delete-rename: Added file '{original_file_name}' to rename list with new name '{file_key}' and file_id '{my_file['content']['id']}' under path '{key}' because it is set to be renamed and the original file exists on Pennsieve.")
+                                        logger.info(f"list-upload-files log-delete-rename: Original file '{original_file_name}' exists on Pennsieve; added rename mapping to '{file_key}' with id '{my_file['content']['id']}' under path '{key}'")
                                         logger.info(f"list-upload-files log-delete-rename: Normalized relative path '{key}' structure now has keys: {list(list_of_files_to_rename[key].keys())}")
-                                    else:
-                                        # If the original exists on Pennsieve, ensure it is slated for renaming
-                                        if original_file_name in ps_folder_children["files"]:
-                                            logger.info(f"list-upload-files log-delete-rename: Original file '{original_file_name}' exists on Pennsieve; adding to rename list to avoid re-upload.")
-                                            my_file = ps_folder_children["files"][original_file_name]
-                                            dataset_root = ds["content"]["name"]
-                                            key = normalize_relative_key(dataset_root, my_relative_path)
-                                            if key not in list_of_files_to_rename:
-                                                list_of_files_to_rename[key] = {"high_lvl_folder": key.split("/")[0] if key else ""}
-                                            list_of_files_to_rename[key][original_file_name] = {
-                                                "final_file_name": file_key,
-                                                "id": my_file["content"]["id"],
-                                            }
-                                            logger.info(f"list-upload-files log-delete-rename: Added file '{original_file_name}' to rename list with new name '{file_key}' and file_id '{my_file['content']['id']}' under path '{key}' (fallback path) to avoid re-upload.")
-                                            logger.info(f"list-upload-files log-delete-rename: Normalized relative path '{key}' structure now has keys: {list(list_of_files_to_rename[key].keys())}")
-                                            # continue so later upload logic sees this file in rename map and skips upload
-                                            continue
-                                        # If only the target name exists on Pennsieve, skip upload (nothing to do)
-                                        if file_key in ps_folder_children["files"]:
-                                            logger.info(f"list-upload-files log-delete-rename: Target file name '{file_key}' already exists on Pennsieve; skipping upload/rename to avoid duplicate.")
-                                            continue
+                                        # original exists — skip uploading local file (rename will handle it)
+                                        continue
+
+                                    # If the target name already exists, nothing to do
+                                    if file_key in ps_folder_children["files"]:
+                                        logger.info(f"list-upload-files log-delete-rename: Target file name '{file_key}' already exists on Pennsieve; skipping upload/rename to avoid duplicate.")
+                                        continue
+
+                                    # Neither original nor target exist on Pennsieve — schedule placeholder rename
+                                    dataset_root = ds["content"]["name"]
+                                    key = normalize_relative_key(dataset_root, my_relative_path)
+                                    if key not in list_of_files_to_rename:
+                                        list_of_files_to_rename[key] = {"high_lvl_folder": key.split("/")[0] if key else ""}
+                                    list_of_files_to_rename[key][original_file_name] = {
+                                        "final_file_name": file_key,
+                                        "id": "",
+                                    }
+                                    logger.info(f"list-upload-files log-delete-rename: Scheduled placeholder rename for '{original_file_name}' -> '{file_key}' under path '{key}'")
                             elif file_key in ps_folder_children["files"] and existing_file_option == "replace":
                                 # Handle non-renamed files - delete if replace option is set
                                 logger.info(f"list-upload-files log-delete-rename: Found file '{file_key}' on Pennsieve for deletion")
@@ -2177,24 +2181,15 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                                 initial_name = file_key[: -len(file_extension)] if file_key.endswith(file_extension) else splitext(basename(file_path))[0]
                                 initial_name_with_extension = basename(file_path)
                                 desired_name_with_extension = file_key
-                            
-                            
-                            # Skip file if it's already tracked for renaming - the rename logic will handle uploading it with the original name
-                            # Normalize the key the same way we do when inserting into list_of_files_to_rename
-                            dataset_root = ds["content"]["name"]
-                            if my_relative_path == dataset_root or my_relative_path == f"/{dataset_root}":
-                                lookup_key = ""
-                            elif my_relative_path.startswith(f"{dataset_root}/"):
-                                lookup_key = my_relative_path[len(dataset_root) + 1 :]
-                            else:
-                                lookup_key = my_relative_path
-                            if lookup_key in list_of_files_to_rename and initial_name_with_extension in list_of_files_to_rename[lookup_key] and existing_file_option != "replace":
-                                logger.info(f"list-upload-files: SKIP {file_key} - tracked for rename under '{lookup_key}'")
-                                continue
 
                             # Skip file if skip option is set and the desired name already exists on Pennsieve
                             if existing_file_option != "replace" and desired_name_with_extension in my_bf_existing_files_name_with_extension:
                                 logger.info(f"list-upload-files: SKIP {file_key} - desired name '{desired_name_with_extension}' exists on Pennsieve")
+                                continue
+
+                            # Skip file if skip option is set and the original name already exist on Pennsieve (Rename logic will handle this)
+                            if existing_file_option != "replace" and "renamed" in file.get("action", []) and initial_name_with_extension in my_bf_existing_files_name_with_extension:
+                                logger.info(f"list-upload-files: SKIP {file_key} - original name '{initial_name_with_extension}' exists on Pennsieve and file is set to be renamed (rename logic will handle this)")
                                 continue
 
                             file_size = getsize(file_path)
@@ -2349,9 +2344,21 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                 if len(list_upload_files) < 1:
                     main_total_generate_dataset_size = renamed_files_counter
 
-                logger.info(f"Amount of files to upload: {len(list_upload_files)} ")
+                # Compute total files (sum of files in each upload group) rather than number of groups
+                total_files_count = sum(len(group[0]) for group in list_upload_files)
+                logger.info(f"Amount of files to upload: {total_files_count} ")
                 logger.info(f"Amount of files to rename: {files_to_rename_count} ")
-                logger.info(f"list_of_files_to_rename: {list_of_files_to_rename} ")
+                # Detailed dump of upload lists to aid debugging missing uploads (pretty-printed)
+                import pprint
+                try:
+                    logger.info("Detailed list_upload_files: %s", pprint.pformat(list_upload_files))
+                except Exception:
+                    logger.exception("Failed to pretty-print list_upload_files")
+
+                try:
+                    logger.info("Detailed list_of_files_to_rename: %s", pprint.pformat(list_of_files_to_rename))
+                except Exception:
+                    logger.exception("Failed to pretty-print list_of_files_to_rename")
 
 
                 # return and mark upload as completed if nothing is added to the manifest and there are no files to rename
@@ -2463,8 +2470,8 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
             total_bytes_uploaded = {"value": 0}
             current_files_in_subscriber_session = total_dataset_files
 
-            # there are files to add to the manifest if there are more than one file in the first folder or more than one folder
-            if len(list_upload_files[0][0]) > 1 or len(list_upload_files) > 1:
+            # there are files to add to the manifest if there is at least one remaining file in the first folder or more than one folder
+            if len(list_upload_files[0][0]) >= 1 or len(list_upload_files) > 1:
                 index_skip = True
                 for folderInformation in list_upload_files:
                     list_file_paths = folderInformation[0]
@@ -2725,11 +2732,16 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                         # id was not found so keep trying to get the id until it is found
                         all_ids_found = False
                         retry_attempts = 0
-                        # Scaling sleep times: 5s, 10s, 30s, 2m, 2m, 2m, ... (after 30s, cap at 2 minutes)
-                        retry_sleep_times = [5, 10, 30, 120]
+                        # Scaling sleep times: exponential-ish backoff up to 2 hours
+                        # 5s, 10s, 30s, 2m, 5m, 10m, 20m, 30m, 60m, 120m
+                        retry_sleep_times = [5, 10, 30, 120, 300, 600, 1200, 1800, 3600, 7200]
                         
                         while not all_ids_found and retry_attempts < len(retry_sleep_times):
                             sleep_duration = retry_sleep_times[retry_attempts]
+                            # Update UI progress so user knows we're waiting for Pennsieve to show the uploaded file
+                            main_curate_progress_message = (
+                                f"Waiting for Pennsieve to process uploads: looking for '{file}' (retry {retry_attempts + 1}/{len(retry_sleep_times)}) — sleeping {sleep_duration}s"
+                            )
                             logger.info(f"Waiting {sleep_duration}s before retry attempt {retry_attempts + 1} to find file ID for '{file}'")
                             time.sleep(sleep_duration)
                             retry_attempts += 1
