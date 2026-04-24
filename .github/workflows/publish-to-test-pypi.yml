@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - staging
-      - rename-post-upload-patch
   workflow_dispatch:
 
 jobs:
