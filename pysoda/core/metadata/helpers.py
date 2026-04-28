@@ -118,7 +118,7 @@ def get_template_path(filename):
                 return template_path
                 
     except Exception as e:
-        logger.warning(f"Failed to search Electron Resources: {e}")
+        logger.info(f"Failed to search Electron Resources: {e}")
         pass
 
     # Method 6: Use importlib_resources as fallback (Python 3.7+)
