@@ -1844,50 +1844,50 @@ def create_upload_information_new(soda, ps, relative_path):
             list_desired_names = []
             list_final_names = []
 
-                list_initial_names = []
-                for file_key, file in dataset_structure["files"].items():
-                    # relative_path = generate_relative_path(my_relative_path, file_key)
-                    file_path = file["path"]
-                    if isfile(file_path) and file.get("location") == "local":
-                        # Check if file is marked as renamed
-                        if "renamed" in file.get("action", []):
-                            original_file_name = file.get("original-name", file_key)
-                            if file_key != original_file_name:
-                                # For brand-new datasets, add renamed files to list_of_files_to_rename
-                                # These will be renamed after upload
-                                dataset_root = ds["content"]["name"]
-                                key = normalize_relative_key(dataset_root, my_relative_path)
-                                
-                                if key not in list_of_files_to_rename:
-                                    list_of_files_to_rename[key] = {"high_lvl_folder": key.split("/")[0] if key else ""}
-                                
-                                list_of_files_to_rename[key][original_file_name] = {
-                                    "final_file_name": file_key,
-                                    "id": "",  # Will be set during rename phase
-                                }
-                        
-                        projected_name = splitext(basename(file_path))[0]
-                        projected_name_w_extension = basename(file_path)
-                        desired_name = splitext(file_key)[0]
-                        desired_name_with_extension = file_key
+            list_initial_names = []
+            for file_key, file in dataset_structure["files"].items():
+                # relative_path = generate_relative_path(my_relative_path, file_key)
+                file_path = file["path"]
+                if isfile(file_path) and file.get("location") == "local":
+                    # Check if file is marked as renamed
+                    if "renamed" in file.get("action", []):
+                        original_file_name = file.get("original-name", file_key)
+                        if file_key != original_file_name:
+                            # For brand-new datasets, add renamed files to list_of_files_to_rename
+                            # These will be renamed after upload
+                            dataset_root = ds["content"]["name"]
+                            key = normalize_relative_key(dataset_root, my_relative_path)
+                            
+                            if key not in list_of_files_to_rename:
+                                list_of_files_to_rename[key] = {"high_lvl_folder": key.split("/")[0] if key else ""}
+                            
+                            list_of_files_to_rename[key][original_file_name] = {
+                                "final_file_name": file_key,
+                                "id": "",  # Will be set during rename phase
+                            }
+                    
+                    projected_name = splitext(basename(file_path))[0]
+                    projected_name_w_extension = basename(file_path)
+                    desired_name = splitext(file_key)[0]
+                    desired_name_with_extension = file_key
 
 
-                    if projected_name != desired_name:
-                        list_initial_names.append(projected_name)
-                        list_local_files.append(file_path)
-                        list_projected_names.append(projected_name_w_extension)
-                        list_desired_names.append(desired_name_with_extension)
-                        list_final_names.append(desired_name)
-                    else:
-                        list_local_files.append(file_path)
-                        list_projected_names.append(projected_name_w_extension)
-                        list_desired_names.append(desired_name_with_extension)
-                        list_final_names.append(desired_name)
-                        list_initial_names.append(projected_name)
+                if projected_name != desired_name:
+                    list_initial_names.append(projected_name)
+                    list_local_files.append(file_path)
+                    list_projected_names.append(projected_name_w_extension)
+                    list_desired_names.append(desired_name_with_extension)
+                    list_final_names.append(desired_name)
+                else:
+                    list_local_files.append(file_path)
+                    list_projected_names.append(projected_name_w_extension)
+                    list_desired_names.append(desired_name_with_extension)
+                    list_final_names.append(desired_name)
+                    list_initial_names.append(projected_name)
 
-                    file_size = getsize(file_path)
-                    main_total_generate_dataset_size += file_size
-                    bytes_file_path_dict[file_path] = file_size
+                file_size = getsize(file_path)
+                main_total_generate_dataset_size += file_size
+                bytes_file_path_dict[file_path] = file_size
 
             if list_local_files:
                 list_upload_files.append([
