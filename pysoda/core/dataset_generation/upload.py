@@ -2229,8 +2229,8 @@ def create_upload_information_existing(soda, dataset_structure, ds, ps, relative
 
 
     # return and mark upload as completed if nothing is added to the manifest
-    if len(list_upload_files) < 1:
-        logger.warning("No files found to upload.")
+    if len(list_upload_files) < 1 and not list_of_files_to_rename:
+        logger.info("No files found to upload or rename.")
         main_curate_progress_message = "No files were uploaded in this session"
         main_curate_status = "Done"
         return
