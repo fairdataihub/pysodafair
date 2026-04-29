@@ -1855,8 +1855,7 @@ def create_upload_information_new(soda, ps, relative_path):
                         if file_key != original_file_name:
                             # For brand-new datasets, add renamed files to list_of_files_to_rename
                             # These will be renamed after upload
-                            ## Aaron TODO: ds used to be passed in from ps_upload_to_dataset params but is not there anymore...
-                            dataset_root = ds["content"]["name"]
+                            dataset_root = soda["generate-dataset"]["dataset-name"]
                             key = normalize_relative_key(dataset_root, my_relative_path)
                             
                             if key not in list_of_files_to_rename:
@@ -2406,7 +2405,7 @@ def create_upload_manifest(soda, ps, ds):
 
         # there are files to add to the manifest if there are more than one file in the first folder or more than one folder
         if len(list_upload_files[0][0]) > 1 or len(list_upload_files) > 1:
-            index_skip = True
+            logger.info(f"Yes we have more files to add")
             for folderInformation in list_upload_files:
                 list_file_paths = folderInformation[0]
                 if brand_new_dataset:
@@ -2422,12 +2421,9 @@ def create_upload_manifest(soda, ps, ds):
                     folder_name = ""
 
                     # Add files to manfiest"
-                    final_files_index = 1 if index_skip else 0
-                    index_skip = False
-                    for file_path in list_file_paths:
-                        ## Aaron TODO: some file rename logic was removed here, not sure if we need it here anymore since the upload logic is in another step.
-                        ps.manifest.add(file_path, folder_name, manifest_id)
-                        final_files_index += 1
+                for file_path in list_file_paths:
+                    ## Aaron TODO: some file rename logic was removed here, not sure if we need it here anymore since the upload logic is in another step.
+                    ps.manifest.add(file_path, folder_name, manifest_id)
 
 
         # add metadata files to the manifest
@@ -2767,9 +2763,13 @@ def monitor_subscriber_progress(events_dict):
             files_uploaded += 1
             main_curation_uploaded_files += 1
 
-def start_subscriber(dataset_id, account_name):
+def start_subscriber(dataset_id, account_name, bytes_per_file_dict_client):
         global ps
-        if ps == None:
+        global bytes_uploaded_per_file 
+
+        if bytes_per_file_dict_client:
+            bytes_uploaded_per_file = bytes_per_file_dict_client
+        if not ps:
             ps = connect_pennsieve_client(account_name)
     
         ps.set_dataset(dataset_id)
@@ -3247,6 +3247,7 @@ def main_curate_function_progress():
     global renaming_files_flow
     global elapsed_time
     global curation_error_message
+    global bytes_uploaded_per_file
 
 
 
@@ -3266,6 +3267,7 @@ def main_curate_function_progress():
         "main_curate_progress_message": main_curate_progress_message,
         "main_total_generate_dataset_size": main_total_generate_dataset_size,
         "main_generated_dataset_size": testing_variable,
+        "bytes_per_file_dict": bytes_uploaded_per_file,
         "elapsed_time_formatted": elapsed_time_formatted,
         "total_files_uploaded": main_curation_uploaded_files,
         "generated_dataset_id": myds["content"]["id"] if myds != "" else None, # when a new dataset gets generated log its id to our analytics
