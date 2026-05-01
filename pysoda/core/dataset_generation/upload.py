@@ -2469,22 +2469,17 @@ def create_upload_manifest(soda, ps, ds):
         logger.error(f"An error occurred in ps_upload_to_dataset function: {str(e)}")
         raise e
 
+def rename_files(dataset_id, list_of_files_to_rename):
 
-        # wait for all of the Agent's processes to finish to avoid errors when deleting files on Windows
-        time.sleep(5)
+    global main_curate_progress_message
+    global main_total_generate_dataset_size
 
-def rename_files_stage(ds):
     # 6. Rename files
     if list_of_files_to_rename:
-        renaming_files_flow = True
         logger.info("ps_create_new_dataset (optional) step 8 rename files")
         logger.info("file-rename-fix-log: Entered rename step, list_of_files_to_rename keys: %s", list(list_of_files_to_rename.keys()))
         main_curate_progress_message = ("Preparing files to be renamed...")
-        dataset_id = ds["content"]["id"]
         collection_ids = {}
-
-        # Wait longer for Pennsieve to create folder structure after upload completes
-        time.sleep(20)
         
         # gets the high level folders in the dataset
         r = requests.get(f"{PENNSIEVE_URL}/datasets/{dataset_id}", headers=create_request_headers(get_access_token()))

@@ -7,5 +7,6 @@ from .upload import (
     check_json_size,
     clean_json_structure,
     check_server_access_to_files,
-    start_subscriber
+    start_subscriber,
+    rename_files
 )
