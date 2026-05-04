@@ -2335,10 +2335,6 @@ def create_upload_manifest(soda, ps, ds):
             main_total_generate_dataset_size = info["main_total_generate_dataset_size"]
             total_files = info["total_files"]
             total_metadata_files = info["total_metadata_files"]
-                
-            # For brand new datasets, no existing files to check - upload all metadata files
-            logger.info("ps_upload_to_dataset: Creating metadata files for brand new dataset (no existing file checks needed)")
-            create_metadata_files_for_upload(soda, list_upload_metadata_files)
         else:
             main_curate_progress_message = "Preparing a list of files to upload"
             info = create_upload_information_existing(soda, dataset_structure, ds, ps, relative_path)
