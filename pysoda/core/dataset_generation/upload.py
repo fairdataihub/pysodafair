@@ -2527,7 +2527,6 @@ def ps_upload_to_dataset(soda, ps, ds, resume=False):
                     if item["content"].get("packageType") == "Collection":
                         collections_found = True
                         collection_ids[item["content"]["name"]] = {"id": item["content"]["nodeId"]}
-                        break
 
                 if not collections_found:
                     collection_retry_count += 1
