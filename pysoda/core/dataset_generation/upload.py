@@ -1695,7 +1695,12 @@ def create_metadata_files_for_upload(soda, list_upload_metadata_files, existing_
 
     if "dataset_metadata" not in soda or soda["dataset_metadata"] == {}:
         logger.info("create_metadata_files_for_upload: No dataset_metadata found in soda, returning early")
-        return
+        return {
+            "total_files": total_files,
+            "main_total_generate_dataset_size": main_total_generate_dataset_size,
+            "total_metadata_files": total_metadata_files,
+            "list_upload_metadata_files": list_upload_metadata_files
+        }
 
     # Normalize existing files for lookup (case-insensitive filename -> file info)
     existing_files_map = {}
