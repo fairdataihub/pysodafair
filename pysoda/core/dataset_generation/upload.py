@@ -5,7 +5,7 @@ from ...utils import (
     uploading_with_ps_account, uploading_to_existing_ps_dataset, 
     can_resume_prior_upload, virtual_dataset_empty, PropertyNotSetError, 
     connect_pennsieve_client, get_dataset_id, get_access_token,
-    PennsieveActionNoPermission, PennsieveDatasetCannotBeFound,
+    PennsieveActionNoPermission, PennsieveDatasetCannotBeFound,NoUploadActions,
     EmptyDatasetError, LocalDatasetMissingSpecifiedFiles,
     PennsieveUploadException, create_request_headers, check_forbidden_characters_ps, get_users_dataset_list,
     PennsieveDatasetNameInvalid, PennsieveDatasetNameTaken, PennsieveAccountInvalid, TZLOCAL, GenerateOptionsNotSet,
@@ -1936,7 +1936,7 @@ def create_upload_information_new(soda, ps, relative_path):
     # Helper function
 
 
-def create_upload_information_existing(soda, dataset_structure, ds, ps, relative_path):
+def create_upload_information_existing(soda, ds, ps, relative_path):
 
     global main_curate_progress_message
     global main_curate_status
@@ -2022,6 +2022,8 @@ def create_upload_information_existing(soda, dataset_structure, ds, ps, relative
             """
 
             nonlocal main_total_generate_dataset_size
+            nonlocal total_files
+            nonlocal bytes_file_path_dict
             global logger
 
 
@@ -2183,6 +2185,9 @@ def create_upload_information_existing(soda, dataset_structure, ds, ps, relative
                             list_desired_names.append(desired_name_with_extension)
                             list_final_names.append(desired_name_with_extension)
                             list_initial_names.append(initial_name)
+                            total_files += 1
+                            main_total_generate_dataset_size += file_size
+                            bytes_file_path_dict[file_path] = file_size
 
                             my_bf_existing_files_name_with_extension.append(desired_name_with_extension)
 
@@ -2203,9 +2208,6 @@ def create_upload_information_existing(soda, dataset_structure, ds, ps, relative
                         ]
                     )
 
-                for item in additional_upload_lists:
-                    list_upload_files.append(item)
-
             return list_upload_files
 
 
@@ -2217,11 +2219,14 @@ def create_upload_information_existing(soda, dataset_structure, ds, ps, relative
     total_metadata_files = 0
     total_manifest_files = 0
     main_total_generate_dataset_size = 0
+    bytes_file_path_dict = {}
+
 
     existing_folder_option = soda["generate-dataset"]["if-existing"]
     existing_file_option = soda["generate-dataset"][
         "if-existing-files"
     ]
+    dataset_structure = soda["dataset-structure"]
 
     # we will need a tracking structure to compare against
     tracking_json_structure = ds
@@ -2235,27 +2240,29 @@ def create_upload_information_existing(soda, dataset_structure, ds, ps, relative
         relative_path,
     )
 
-    logger.info(f"Amount of files to upload: {len(list_upload_files)} ")
+    logger.info(f"Amount of files to upload: {total_files} ")
 
-    ## Aaron TODO: I added the check for list_of_files_to_rename here because we didn't want to return early out of here if there are still files to be renamed
-    ## (Not sure if this is the case anymore?)
     # return and mark upload as completed if nothing is added to the manifest
     if len(list_upload_files) < 1 and not list_of_files_to_rename:
         logger.info("No files found to upload or rename.")
         main_curate_progress_message = "No files were uploaded in this session"
         main_curate_status = "Done"
-        return
+        raise NoUploadActions("No files need to be uploaded or renamed.")
 
     # 3. Add high-level metadata files to a list
     if "dataset_metadata" in soda.keys():
         existing_root_files = tracking_json_structure.get("children", {}).get("files", {})
-        create_metadata_files_for_upload(
+        data = create_metadata_files_for_upload(
             soda, 
             list_upload_metadata_files,
             existing_root_files=existing_root_files,
             existing_file_option=existing_file_option,
             ps=ps
         )
+
+    total_files += data["total_files"]
+    main_total_generate_dataset_size += data["main_total_generate_dataset_size"]
+    total_metadata_files += data["total_metadata_files"]
 
     return {
         "list_upload_files": list_upload_files,
@@ -2322,7 +2329,6 @@ def create_upload_manifest(soda, ps, ds):
         list_upload_manifest_files = []
         list_of_files_to_rename = {}
         brand_new_dataset = False
-        dataset_structure = soda["dataset-structure"]
         generate_option = soda["generate-dataset"]["generate-option"]
         starting_point = soda["starting-point"]["origin"]
         relative_path = ds["content"]["name"]
@@ -2343,7 +2349,7 @@ def create_upload_manifest(soda, ps, ds):
             total_metadata_files = info["total_metadata_files"]
         else:
             main_curate_progress_message = "Preparing a list of files to upload"
-            info = create_upload_information_existing(soda, dataset_structure, ds, ps, relative_path)
+            info = create_upload_information_existing(soda, ds, ps, relative_path)
             list_upload_files = info["list_upload_files"]
             list_upload_metadata_files = info["list_upload_metadata_files"]
             main_total_generate_dataset_size = info["main_total_generate_dataset_size"]
