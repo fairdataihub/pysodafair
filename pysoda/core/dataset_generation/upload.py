@@ -1945,6 +1945,7 @@ def create_upload_information_existing(soda, ds, ps, relative_path):
 
     global main_curate_progress_message
     global main_curate_status
+    global list_of_files_to_rename
 
 
     # See how to create folders with the Pennsieve agent
@@ -2029,6 +2030,7 @@ def create_upload_information_existing(soda, ds, ps, relative_path):
             nonlocal main_total_generate_dataset_size
             nonlocal total_files
             nonlocal bytes_file_path_dict
+            global list_of_files_to_rename
             global logger
 
 
@@ -2245,14 +2247,6 @@ def create_upload_information_existing(soda, ds, ps, relative_path):
         relative_path,
     )
 
-    logger.info(f"Amount of files to upload: {total_files} ")
-
-    # return and mark upload as completed if nothing is added to the manifest
-    if len(list_upload_files) < 1 and not list_of_files_to_rename:
-        logger.info("No files found to upload or rename.")
-        main_curate_progress_message = "No files were uploaded in this session"
-        main_curate_status = "Done"
-        raise NoUploadActions("No files need to be uploaded or renamed.")
 
     # 3. Add high-level metadata files to a list
     if "dataset_metadata" in soda.keys():
@@ -2265,9 +2259,21 @@ def create_upload_information_existing(soda, ds, ps, relative_path):
             ps=ps
         )
 
+
+    logger.info(f"Amount of files to upload: {total_files} ")
+    
+
     total_files += data["total_files"]
     main_total_generate_dataset_size += data["main_total_generate_dataset_size"]
     total_metadata_files += data["total_metadata_files"]
+
+
+    # return and mark upload as completed if nothing is added to the manifest and no files need to be renamed
+    if total_files < 1 and not list_of_files_to_rename:
+        logger.info("No files found to upload or rename.")
+        main_curate_progress_message = "No files were uploaded in this session and no files need to be renamed"
+        main_curate_status = "Done"
+        raise NoUploadActions("No files need to be uploaded or renamed.")
 
     return {
         "list_upload_files": list_upload_files,
@@ -2368,11 +2374,25 @@ def create_upload_manifest(soda, ps, ds):
 
         
  
-        if len(list_upload_files) <= 0:
+        if total_files <  1 and not list_of_files_to_rename:
             # TODO: Add information showing nothing added and no manifest created or maybe even just throw a 400 error
             logger.info("Manifest creation: Failed 0 files added to dataset.")
-            raise EmptyDatasetError("The dataset you are trying to upload is empty.")
+            end = timer()
+            logger.info(f"Time for ps_upload_to_dataset function: {timedelta(seconds=end - start)}")
+            raise NoUploadActions("There are no files to upload to Pennsieve or files toe rename on Pennsieve.")
+        
+        # user does not have files to upload but there are imported files that exist on Pennsieve that need to be renamed
+        if total_files < 1 and list_of_files_to_rename:
+            end = timer()
+            logger.info(f"Time for ps_upload_to_dataset function: {timedelta(seconds=end - start)}")
 
+            return {
+                    "manifest_id": None, 
+                    "dataset_id": selected_id, 
+                    "list_of_files_to_rename": list_of_files_to_rename, 
+                    "size_of_dataset": 0, 
+                    "number_of_files": 0
+                    }
 
         logger.info(f"The upload file list is: {list_upload_files}")
         
