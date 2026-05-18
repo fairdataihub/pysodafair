@@ -2131,6 +2131,7 @@ def create_upload_information_existing(soda, ds, ps, relative_path):
     }
 
 
+files_uploaded = 0
 
 def create_upload_manifest(soda, ps, ds):
     global logger
