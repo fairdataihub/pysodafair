@@ -733,6 +733,27 @@ def generate_dataset_locally(soda):
             folder, folderpath, list_copy_files, list_move_files
         )
 
+    # Handle root-level files in the dataset
+    if "files" in dataset_structure.keys():
+        for file_key, file in dataset_structure["files"].items():
+            if "deleted" not in file["action"]:
+                file_type = file.get("location")
+                if file_type == "local":
+                    file_path = file["path"]
+                    if isfile(file_path):
+                        destination_path = abspath(join(datasetpath, file_key))
+                        if not isfile(destination_path):
+                            if (
+                                "existing" in file["action"]
+                                and soda["generate-dataset"]["if-existing"] == "merge"
+                            ):
+                                list_move_files.append([file_path, destination_path])
+                            else:
+                                main_total_generate_dataset_size += getsize(file_path)
+                                list_copy_files.append([file_path, destination_path])
+                    else:
+                        logger.info(f"root-level file_path {file_path} does not exist. Skipping.")
+
     # 3. Add high-level metadata files in the list
     if "dataset_metadata" in soda.keys():
         logger.info("generate_dataset_locally (optional) step 3 handling dataset_metadata")
