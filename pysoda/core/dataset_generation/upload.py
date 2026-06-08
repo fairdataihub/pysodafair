@@ -3516,7 +3516,7 @@ def generate_manifest_file_data(dataset_structure):
 
     # Helper: Create a manifest row for a folder
     def create_folder_entry(folder_name, path_parts):
-        full_path = "/".join(path_parts + [folder_name]) + "/"
+        full_path = "/".join(path_parts + [folder_name])
         return [
             full_path.lstrip("/"),
             "", "", "folder", "", "", "", "", "", ""
