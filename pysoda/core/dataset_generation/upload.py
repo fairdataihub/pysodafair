@@ -3620,10 +3620,18 @@ def generate_manifest_file_data(dataset_structure):
 
     # Helper: Create a manifest row for a folder
     def create_folder_entry(folder_name, path_parts):
-        full_path = "/".join(path_parts + [folder_name])
+        path = "/".join(path_parts + [folder_name]).strip("/")
         return [
-            full_path.lstrip("/"),
-            "", "", "folder", "", "", "", "", "", ""
+            path,
+            "",
+            "",
+            "folder",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
         ]
 
     # Helper: Create a manifest row for a file
@@ -3648,6 +3656,7 @@ def generate_manifest_file_data(dataset_structure):
 
     # Recursive traversal of folders and files
     def traverse_folders(folder, path_parts):
+        logger.info(f"[TRAVERSE] Starting traverse at path_parts={path_parts}")
         if not manifest_data:
             manifest_data.append(header_row)
 
@@ -3673,6 +3682,7 @@ def generate_manifest_file_data(dataset_structure):
 
         # Process subfolders
         for subfolder_name, subfolder in folder.get("folders", {}).items():
+            logger.info(f"[TRAVERSE] Processing subfolder: {subfolder_name} at path_parts: {path_parts}")
             manifest_data.append(create_folder_entry(subfolder_name, path_parts))
             traverse_folders(subfolder, path_parts + [subfolder_name])
 
