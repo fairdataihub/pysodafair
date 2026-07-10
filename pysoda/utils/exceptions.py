@@ -39,7 +39,13 @@ class PennsieveDatasetCannotBeFound(Exception):
 
     def __str__(self):
         return self.error_message
-    
+
+class NoUploadActions(Exception):
+    def __init__(self, message):
+        self.error_message = message
+
+    def __str__(self):
+        return self.error_message
     
 class ConfigProfileNotSet(Exception):
     def __init__(self, profile_name):

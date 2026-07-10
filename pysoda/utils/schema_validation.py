@@ -103,7 +103,7 @@ def get_schema_path(filename):
 # TODO: Make an enum of the schema names and add extensions to the schema names in the function.....or to the enum.
 def validate_schema(schema, schema_name):
     """
-    Validate submission metadata against the submission schema.
+    Validate given metadata against the corresponding schema.
 
     Args:
         schema (dict): The python dictionary version of the schema or subschema to validate against the json schema.

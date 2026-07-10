@@ -1,4 +1,4 @@
-from pennsieve2.pennsieve import Pennsieve
+from pennsieve import Pennsieve
 from .exceptions import PennsieveAgentError, PennsieveAgentRPCError, PennsieveAccountInvalid
 
 def connect_pennsieve_client(account_name):
