@@ -2515,6 +2515,15 @@ def create_upload_manifest(soda, ps, ds):
         raise e
 
 def rename_files(dataset_id, list_of_files_to_rename):
+    """
+        Inputs: 
+            - dataset_id: Pennsieve ID for dataset
+            - list_of_files_to_rename: List of files on Pennsieve that need to be renamed and target name
+        Assumption: All files are already on Pennsieve.
+        Renames files from the list of files to rename. Does not differentiate between files already renamed and files that are deleted. If cannot find a file
+        it considers it already renamed and moves on.
+
+    """
 
     global main_curate_progress_message
     global main_total_generate_dataset_size
@@ -2614,28 +2623,10 @@ def rename_files(dataset_id, list_of_files_to_rename):
     r.raise_for_status()
     dataset_content = r.json()["children"]
     
-    # Scan for collections with bounded retries (simple GET per attempt)
-    collections_found = False
-    collection_retry_count = 0
-    max_collection_retries = 5
-    while not collections_found and collection_retry_count < max_collection_retries:
-        for item in dataset_content:
-            if item["content"].get("packageType") == "Collection":
-                collections_found = True
-                collection_ids[item["content"]["name"]] = {"id": item["content"]["nodeId"]}
-                continue
-
-        if not collections_found:
-            collection_retry_count += 1
-            logger.info("No collections found, retrying after 10s... (attempt %d)", collection_retry_count)
-            time.sleep(10)
-            r = requests.get(f"{PENNSIEVE_URL}/datasets/{dataset_id}", headers=create_request_headers(get_access_token()))
-            r.raise_for_status()
-            dataset_content = r.json().get("children", [])
-            logger.info(f"After retry {collection_retry_count}, dataset_content now has {len(dataset_content)} items")
-
-    if not collections_found:
-        logger.info(f"Still no collections found after {max_collection_retries} retries.")
+    for item in dataset_content:
+        if item["content"].get("packageType") == "Collection":
+            collection_ids[item["content"]["name"]] = {"id": item["content"]["nodeId"]}
+            continue
 
 
     # Process each key in rename map
@@ -2689,10 +2680,8 @@ def rename_files(dataset_id, list_of_files_to_rename):
             logger.info(f"No 'id' key found for relative_path '{relative_path}'")
             continue
         
-        collection_id = list_of_files_to_rename[relative_path]["id"]
         high_lvl_folder_name = list_of_files_to_rename[relative_path].get("high_lvl_folder", "")
         # Check if this is a dataset root file (key='' and no high_lvl_folder)
-        is_dataset_root = (relative_path == '' and not high_lvl_folder_name)
         
         for file in list_of_files_to_rename[relative_path].keys():
             if file == "id" or file == "high_lvl_folder":
@@ -2700,7 +2689,7 @@ def rename_files(dataset_id, list_of_files_to_rename):
             new_name = list_of_files_to_rename[relative_path][file]["final_file_name"]
             file_id = list_of_files_to_rename[relative_path][file]["id"]
 
-            if file_id != "":
+            if file_id:
                 # id was found so make api call to rename with final file name
                 try:
                     r = requests.put(f"{PENNSIEVE_URL}/packages/{file_id}?updateStorage=true", json={"name": new_name}, headers=create_request_headers(get_access_token()))
@@ -2708,68 +2697,10 @@ def rename_files(dataset_id, list_of_files_to_rename):
                 except Exception as e:
                     if r.status_code == 500:
                         continue
-                main_generated_dataset_size += 1
-            else:
-                # id was not found so keep trying to get the id until it is found
-                all_ids_found = False
-                retry_attempts = 0
-                # Scaling sleep times: exponential-ish backoff up to 2 hours
-                # 5s, 10s, 30s, 2m, 5m, 10m, 20m, 30m, 60m, 120m
-                retry_sleep_times = [5, 10, 30, 120, 300, 600, 1200, 1800, 3600, 7200]
-                
-                while not all_ids_found and retry_attempts < len(retry_sleep_times):
-                    sleep_duration = retry_sleep_times[retry_attempts]
-                    # Update UI progress so user knows we're waiting for Pennsieve to show the uploaded file
-                    main_curate_progress_message = (
-                        f"Waiting for Pennsieve to process uploads: looking for '{file}' (retry {retry_attempts + 1}/{len(retry_sleep_times)}) — sleeping {sleep_duration}s"
-                    )
-                    logger.info(f"Waiting {sleep_duration}s before retry attempt {retry_attempts + 1} to find file ID for '{file}'")
-                    time.sleep(sleep_duration)
-                    retry_attempts += 1
+            # if file not found on Pennsieve assume it is already renamed as opposed to deleted. 
+            # if deleted it is not the function's job to notify the user.
+            main_generated_dataset_size += 1
 
-                    limit = 100
-                    offset = 0
-                    dataset_content = []
-
-                    # Use correct endpoint: /datasets/ for root-level files, /packages/ for folder files
-                    while True:
-                        if is_dataset_root:
-                            r = requests.get(f"{PENNSIEVE_URL}/datasets/{collection_id}?limit={limit}&offset={offset}", headers=create_request_headers(get_access_token()))
-                        else:
-                            r = requests.get(f"{PENNSIEVE_URL}/packages/{collection_id}?limit={limit}&offset={offset}", headers=create_request_headers(get_access_token()))
-                        r.raise_for_status()
-                        page = r.json().get("children", [])
-                        dataset_content.extend(page)
-                        if len(page) < limit:
-                            break
-                        offset += limit
-                    
-                    for item in dataset_content:
-                        if item["content"]["packageType"] != "Collection":
-                            file_name = item["content"]["name"]
-                            found_file_id = item["content"]["nodeId"]
-
-                            if file_name == file:
-                                # id was found so make api call to rename with final file name
-                                try:
-                                    r = requests.put(f"{PENNSIEVE_URL}/packages/{found_file_id}?updateStorage=true", json={"name": new_name}, headers=create_request_headers(get_access_token()))
-                                    r.raise_for_status()
-                                except Exception as e:
-                                    if r.status_code == 500:
-                                        continue
-                                main_generated_dataset_size += 1
-                                all_ids_found = True
-                                break
-                
-                if not all_ids_found:
-                    total_wait_time = sum(retry_sleep_times)
-                    error_msg = (
-                        f"Could not find file ID for '{file}' in '{relative_path}' after {len(retry_sleep_times)} retry attempts "
-                        f"(total wait time: {total_wait_time}s). The file may not have been properly processed during upload. "
-                        f"Please retry the upload."
-                    )
-                    logger.error(error_msg)
-                    raise PennsieveUploadException(error_msg)
   
 def monitor_subscriber_progress(events_dict):
     """
