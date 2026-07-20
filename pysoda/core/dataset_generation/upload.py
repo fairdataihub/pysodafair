@@ -2219,9 +2219,6 @@ def create_upload_information_existing(soda, ds, ps, relative_path):
 
                             my_bf_existing_files_name_with_extension.append(desired_name_with_extension)
 
-                            # add to projected dataset size to be generated
-                            main_total_generate_dataset_size += file_size
-
                 if list_local_files:
                     ds_name = soda["ps-dataset-selected"]["dataset-name"]
                     list_upload_files.append(
