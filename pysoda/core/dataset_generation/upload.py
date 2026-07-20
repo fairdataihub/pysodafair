@@ -2292,9 +2292,9 @@ def create_upload_information_existing(soda, ds, ps, relative_path):
     # return and mark upload as completed if nothing is added to the manifest and no files need to be renamed
     if total_files < 1 and not list_of_files_to_rename:
         logger.info("No files found to upload or rename.")
-        main_curate_progress_message = "No files were uploaded in this session and no files need to be renamed"
+        main_curate_progress_message = "There are no files to upload to Pennsieve or files to rename on Pennsieve."
         main_curate_status = "Done"
-        raise NoUploadActions("No files need to be uploaded or renamed.")
+        raise NoUploadActions("There are no files to upload to Pennsieve or files to rename on Pennsieve.")
 
     return {
         "list_upload_files": list_upload_files,
@@ -2401,7 +2401,9 @@ def create_upload_manifest(soda, ps, ds):
             logger.info("Manifest creation: Failed 0 files added to dataset.")
             end = timer()
             logger.info(f"Time for ps_upload_to_dataset function: {timedelta(seconds=end - start)}")
-            raise NoUploadActions("There are no files to upload to Pennsieve or files toe rename on Pennsieve.")
+            main_curate_progress_message = "There are no files to upload to Pennsieve or files to rename on Pennsieve."
+            main_curate_status = "Done"
+            raise NoUploadActions("There are no files to upload to Pennsieve or files to rename on Pennsieve.")
         
         # user does not have files to upload but there are imported files that exist on Pennsieve that need to be renamed
         if total_files < 1 and list_of_files_to_rename:
@@ -2511,7 +2513,7 @@ def create_upload_manifest(soda, ps, ds):
                 "number_of_files": total_files
                 }
     except Exception as e:
-        logger.error(f"An error occurred in ps_upload_to_dataset function: {str(e)}")
+        logger.error(f"An error occurred in create_upload_manifest function: {str(e)}")
         raise e
 
 def rename_files(dataset_id, list_of_files_to_rename):
