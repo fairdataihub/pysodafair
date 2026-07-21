@@ -3110,7 +3110,7 @@ def validate_dataset_structure(soda):
 
 
 
-def reset_upload_session_environment(resume):
+def reset_upload_session_environment():
     global main_curate_status
     global main_curate_progress_message
     global main_total_generate_dataset_size
@@ -3134,8 +3134,6 @@ def reset_upload_session_environment(resume):
     generate_start_time = time.time()
 
     # variables for tracking the progress of the curate process on the frontend 
-    main_curate_status = ""
-    main_curate_progress_message = "Starting..."
     main_total_generate_dataset_size = 0
     main_generated_dataset_size = 0
     main_curation_uploaded_files = 0
@@ -3143,7 +3141,7 @@ def reset_upload_session_environment(resume):
     generated_dataset_id = None
     curation_error_message = ""
 
-    main_curate_status = "Curating"
+    main_curate_status = "Starting"
     main_curate_progress_message = "Starting dataset curation"
     main_generate_destination = ""
     main_initial_bfdataset_size = 0
