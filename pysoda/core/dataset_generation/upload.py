@@ -1897,6 +1897,8 @@ def create_upload_information_new(soda, ps, relative_path):
                                 "final_file_name": file_key,
                                 "id": "",  # Will be set during rename phase
                             }
+
+                            
                     
                     projected_name = splitext(basename(file_path))[0]
                     projected_name_w_extension = basename(file_path)
@@ -2120,6 +2122,8 @@ def create_upload_information_existing(soda, ds, ps, relative_path):
                                         "final_file_name": file_key,
                                         "id": "",
                                     }
+
+                                    
                                 # Handle the case for existing_file_option is not "replace" 
                                 else:
                                     # 1) If the original exists on Pennsieve, add mapping with the file's id and skip uploading the local file.
@@ -2135,6 +2139,7 @@ def create_upload_information_existing(soda, ds, ps, relative_path):
                                             "final_file_name": file_key,
                                             "id": my_file["content"]["id"],
                                         }
+                                        
                                         # original exists — skip uploading local file (rename will handle it)
                                         continue
 
@@ -2151,6 +2156,7 @@ def create_upload_information_existing(soda, ds, ps, relative_path):
                                         "final_file_name": file_key,
                                         "id": "",
                                     }
+                                    
                             elif file_key in ps_folder_children["files"] and existing_file_option == "replace":
                                 # Handle non-renamed files - delete if replace option is set
                                 my_file = ps_folder_children["files"][file_key]
