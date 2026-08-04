@@ -11,5 +11,6 @@ from .upload import (
     rename_files,
     get_origin_manifest_id,
     generate_local_dataset,
-    reset_upload_session_environment
+    reset_upload_session_environment,
+    set_upload_state
 )

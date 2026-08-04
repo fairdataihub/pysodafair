@@ -1125,6 +1125,38 @@ total_metadata_files = 0
 total_manifest_files = 0
 
 
+def set_upload_state(upload_progress):
+    """
+        If an upload is being restarted a state object can be passed in to set the state according to where the upload left off.
+        
+        Args:
+            upload_progress: (dict[str, Any]): A state object that can have the following keys
+                - manifest-id: The ID from the Pennsieve Agent for the upload manifest
+                - size-of-dataset: The size (in bytes) of the dataset being uploaded
+                - number-of-files: The number of files in the dataset
+                - bytesPerFile: A dictionary with every file and the amount of bytes uploaded to pennsieve thus far.
+                - list-of-files-to-rename: A list containing the current and target names of files that need to be renamed
+                - dataset-d: The id of the Pennsieve dataset 
+                - current-stage: Can be setup, upload, rename, verify. Unnecessary for backend. 
+    """
+    global main_total_generate_dataset_size
+    global bytes_uploaded_per_file
+    global main_generated_dataset_size
+
+    # check if upload_progress has any keys - if none then no state to set
+    if len(upload_progress.keys()) == 0:
+        return
+
+    if "size-of-dataset" in upload_progress:
+        main_total_generate_dataset_size = upload_progress["size-of-dataset"]
+    if "bytesPerFile" in upload_progress:
+        # will set main_generated_dataset_size in subscriber
+        bytes_uploaded_per_file = upload_progress["bytesPerFile"]
+        main_generated_dataset_size = sum(bytes_uploaded_per_file.values())
+        
+
+    return 
+
 def create_metadata_files_for_upload(soda, list_upload_metadata_files, existing_root_files=None, existing_file_option="skip", ps=None):
     """
     Creates metadata files (Excel and text) based on soda["dataset_metadata"] and appends them to the upload list.
