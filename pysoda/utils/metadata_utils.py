@@ -36,19 +36,27 @@ def remove_high_level_folder_from_path(paths):
 
 
 double_extensions = [
-    ".ome.tiff",
-    ".ome.tif",
-    ".ome.tf2,",
-    ".ome.tf8",
-    ".ome.btf",
-    ".ome.xml",
-    ".brukertiff.gz",
-    ".mefd.gz",
-    ".moberg.gz",
-    ".nii.gz",
-    ".mgh.gz",
-    ".tar.gz",
-    ".bcl.gz",
+        ".bcl.gz",
+        ".brukertiff.gz",
+        ".mefd.gz",
+        ".moberg.gz",
+        ".nii.gz",
+        ".ome.btf",
+        ".ome.tif",
+        ".ome.tif2",
+        ".ome.tif8",
+        ".ome.tiff",
+        ".ome.xml",
+        ".ome.zarr",
+        ".tar.gz",
+        ".csv.gz",
+        ".txt.gz",
+        ".tar.xz",
+        ".json.gz",
+        ".tar.bz2",
+        ".vcf.gz",
+        ".dcm.gz",
+        ".mgh.gz"
 ]
 
 

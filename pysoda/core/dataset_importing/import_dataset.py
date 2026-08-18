@@ -64,19 +64,27 @@ def import_pennsieve_dataset(soda_json_structure, requested_sparc_only=True):
         "outputs_metadata.xlsx",
     ]
     double_extensions = [
-        ".ome.tiff",
-        ".ome.tif",
-        ".ome.tf2,",
-        ".ome.tf8",
-        ".ome.btf",
-        ".ome.xml",
+        ".bcl.gz",
         ".brukertiff.gz",
         ".mefd.gz",
         ".moberg.gz",
         ".nii.gz",
-        ".mgh.gz",
+        ".ome.btf",
+        ".ome.tif",
+        ".ome.tif2",
+        ".ome.tif8",
+        ".ome.tiff",
+        ".ome.xml",
+        ".ome.zarr",
         ".tar.gz",
-        ".bcl.gz",
+        ".csv.gz",
+        ".txt.gz",
+        ".tar.xz",
+        ".json.gz",
+        ".tar.bz2",
+        ".vcf.gz",
+        ".dcm.gz",
+        ".mgh.gz"
     ]
 
     global create_soda_json_completed

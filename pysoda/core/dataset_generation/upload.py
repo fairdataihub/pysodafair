@@ -768,19 +768,27 @@ def ps_get_existing_files_details(ps_folder):
 
     files = ps_folder["children"]["files"]
     double_extensions = [
-        ".ome.tiff",
-        ".ome.tif",
-        ".ome.tf2,",
-        ".ome.tf8",
-        ".ome.btf",
-        ".ome.xml",
+        ".bcl.gz",
         ".brukertiff.gz",
         ".mefd.gz",
         ".moberg.gz",
         ".nii.gz",
-        ".mgh.gz",
+        ".ome.btf",
+        ".ome.tif",
+        ".ome.tif2",
+        ".ome.tif8",
+        ".ome.tiff",
+        ".ome.xml",
+        ".ome.zarr",
         ".tar.gz",
-        ".bcl.gz",
+        ".csv.gz",
+        ".txt.gz",
+        ".tar.xz",
+        ".json.gz",
+        ".tar.bz2",
+        ".vcf.gz",
+        ".dcm.gz",
+        ".mgh.gz"
     ]
 
 
@@ -3016,7 +3024,9 @@ recognized_double_extensions = [
     ".json.gz",
     ".tar.bz2",
     ".vcf.gz",
-    ".dcm.gz"
+    ".dcm.gz",
+    ".mgh.gz"
+
 ]
 
 
