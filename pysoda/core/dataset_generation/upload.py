@@ -2996,13 +2996,44 @@ def generate_manifest_file_locally(generate_purpose, soda):
     open_file(manifest_destination)
     return {"success_message_or_manifest_destination": "success"}
 
+recognized_double_extensions = [
+    ".bcl.gz",
+    ".brukertiff.gz",
+    ".mefd.gz",
+    ".moberg.gz",
+    ".nii.gz",
+    ".ome.btf",
+    ".ome.tif",
+    ".ome.tif2",
+    ".ome.tif8",
+    ".ome.tiff",
+    ".ome.xml",
+    ".ome.zarr",
+    ".tar.gz",
+    ".csv.gz",
+    ".txt.gz",
+    ".tar.xz",
+    ".json.gz",
+    ".tar.bz2",
+    ".vcf.gz",
+    ".dcm.gz"
+]
+
 
 
 def generate_manifest_file_data(dataset_structure):
     # Helper: Determine file extension (handles any extensions).
     def get_file_extension(filename):
         suffixes = pathlib.Path(filename).suffixes
-        return "".join(suffixes)
+        if len(suffixes) == 1:
+            return suffixes[-1]
+        
+        suffix_str = "".join(suffixes).lower()
+        if suffix_str in recognized_double_extensions:
+            return suffix_str
+
+        return suffixes[-1]
+        
 
     # Helper: Create a manifest row for a folder
     def create_folder_entry(folder_name, path_parts):
