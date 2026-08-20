@@ -2706,41 +2706,57 @@ def generate_local_dataset(soda):
     list_move_files = []
     dataset_structure = soda["dataset-structure"]
 
-    for folder_key, folder in dataset_structure["folders"].items():
-        folderpath = join(datasetpath, folder_key)
-        mkdir(folderpath)
-        list_copy_files, list_move_files = recursive_dataset_scan(
-            folder, folderpath, list_copy_files, list_move_files
-        )
+    # Recursively scan the dataset structure to compile lists of files to copy and move
+    list_copy_files, list_move_files = recursive_dataset_scan(
+        dataset_structure, datasetpath, list_copy_files, list_move_files
+    )
 
     # 3. Add high-level metadata files in the list
+    # Only create metadata files if they don't already exist in the dataset structure (e.g., from imported spreadsheet files)
     if "dataset_metadata" in soda.keys():
         logger.info("generate_dataset_locally (optional) step 3 handling dataset_metadata")
         metadata_files = soda["dataset_metadata"]
-        # log the metadata files that will be created
-        for file_key, _ in metadata_files.items():
-            if file_key == "subjects":
-                subjects.create_excel(soda, False, join(datasetpath, "subjects.xlsx"))
-            elif file_key == "samples":
-                samples.create_excel(soda, False, join(datasetpath, "samples.xlsx"))
-            elif file_key == "code_description":
-                code_description.create_excel(soda, False, join(datasetpath, "code_description.xlsx"))
-            elif file_key == "dataset_description": 
-                dataset_description.create_excel(soda, False, join(datasetpath, "dataset_description.xlsx"))
-            elif file_key == "performances":
-                performances.create_excel(soda, False, join(datasetpath, "performances.xlsx"))
-            elif file_key == "resources":
-                resources.create_excel(soda, False, join(datasetpath, "resources.xlsx"))
-            elif file_key == "sites":
-                sites.create_excel(soda, False, join(datasetpath, "sites.xlsx"))
-            elif file_key == "submission":
-                submission.create_excel(soda, False, join(datasetpath, "submission.xlsx"))
-            elif file_key == "README.md":
-                text_metadata.create_text_file(soda, False, join(datasetpath, "README.md"), "README.md")
-            elif file_key == "CHANGES":
-                text_metadata.create_text_file(soda, False, join(datasetpath, "CHANGES"), "CHANGES")
-            elif file_key == "LICENSE":
-                text_metadata.create_text_file(soda, False, join(datasetpath, "LICENSE"), "LICENSE")
+        logger.info(f"metadata_files in soda['dataset_metadata']: {metadata_files}")
+        
+        for file_key in metadata_files:
+            # Check if the metadata file already exists in the dataset structure
+            file_name = f"{file_key}.xlsx" if file_key not in ["README.md", "CHANGES", "LICENSE"] else file_key            
+            if file_name in dataset_structure.get("files", {}):
+                # File already exists in structure (from import), skip creation
+                logger.info(f"Metadata file {file_key} already exists in dataset structure, skipping creation")
+                continue
+
+            output_path = join(datasetpath, file_name)
+            
+            try:
+                if file_key == "subjects":
+                    subjects.create_excel(soda, False, output_path)
+                elif file_key == "samples":
+                    samples.create_excel(soda, False, output_path)
+                elif file_key == "code_description":
+                    code_description.create_excel(soda, False, output_path)
+                elif file_key == "dataset_description": 
+                    dataset_description.create_excel(soda, False, output_path)
+                elif file_key == "performances":
+                    performances.create_excel(soda, False, output_path)
+                elif file_key == "resources":
+                    resources.create_excel(soda, False, output_path)
+                elif file_key == "sites":
+                    sites.create_excel(soda, False, output_path)
+                elif file_key == "submission":
+                    submission.create_excel(soda, False, output_path)
+                elif file_key == "README.md":
+                    text_metadata.create_text_file(soda, False, output_path, "README.md")
+                elif file_key == "CHANGES":
+                    text_metadata.create_text_file(soda, False, output_path, "CHANGES")
+                elif file_key == "LICENSE":
+                    text_metadata.create_text_file(soda, False, output_path, "LICENSE")
+                else:
+                    logger.warning(f"Unknown metadata file_key: {file_key}, skipping")
+                logger.info(f"Successfully created metadata file {file_key}")
+            except Exception as e:
+                logger.error(f"Error creating metadata file {file_key}: {str(e)}", exc_info=True)
+
 
     # 4. Add manifest files in the list
     if "manifest_file" in soda["dataset_metadata"].keys():
