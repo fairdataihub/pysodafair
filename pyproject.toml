@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pysodafair"
-version = "1.2.6"
+version = "1.2.7"
 description = "Pysoda package for Fairdataihub tools"
 authors = ["Christopher Marroquin <cmarroquin@calmi2.org>"]
 license = "MIT"
