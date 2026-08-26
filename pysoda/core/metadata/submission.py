@@ -891,10 +891,3 @@ soda = {
     "path-to-local-dataset-copy": "/Users/aaronm/Downloads/ffd"
 }
 
-
-
-try:
-    create_excel(soda, False, "submission.xlsx")
-except Exception as e:
-    print(e)
-
