@@ -76,8 +76,6 @@ def create_excel(soda, upload_boolean, local_destination):
 
     wb.save(destination)
 
-    print("Excel file created successfully at:", destination)
-
     wb.close()
 
     # calculate the size of the metadata file
@@ -87,8 +85,6 @@ def create_excel(soda, upload_boolean, local_destination):
 
     ## if generating directly on Pennsieve, then call upload function and then delete the destination path
     if upload_boolean:
-        print("Uploading Excel file to Pennsieve...")
         upload_metadata_file("submission.xlsx", soda, destination, True)
-        print("Excel file uploaded successfully to Pennsieve.")
     return {"size": size}
 
