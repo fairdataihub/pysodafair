@@ -2192,7 +2192,6 @@ def rename_files(dataset_id, list_of_files_to_rename):
 
     # 6. Rename files
     logger.info("ps_create_new_dataset (optional) step 8 rename files")
-    logger.info("file-rename-fix-log: Entered rename step, list_of_files_to_rename keys: %s", list(list_of_files_to_rename.keys()))
     main_curate_progress_message = ("Preparing files to be renamed...")
     collection_ids = {}
     
@@ -3306,7 +3305,6 @@ def generate_manifest_file_data(dataset_structure):
 
     # Recursive traversal of folders and files
     def traverse_folders(folder, path_parts):
-        logger.info(f"[TRAVERSE] Starting traverse at path_parts={path_parts}")
         if not manifest_data:
             manifest_data.append(header_row)
 
@@ -3332,7 +3330,6 @@ def generate_manifest_file_data(dataset_structure):
 
         # Process subfolders
         for subfolder_name, subfolder in folder.get("folders", {}).items():
-            logger.info(f"[TRAVERSE] Processing subfolder: {subfolder_name} at path_parts: {path_parts}")
             manifest_data.append(create_folder_entry(subfolder_name, path_parts))
             traverse_folders(subfolder, path_parts + [subfolder_name])
 
