@@ -154,7 +154,6 @@ def validation_error_message(e):
     """
     msg = "The following error was found in your metadata:"
     e_type = e.schema_path.pop().strip()
-    print(e.schema_path)
     if e_type == "type":
         s = ''
         while e.schema_path:

@@ -51,9 +51,19 @@ def create_excel(soda, upload_boolean, local_destination):
         ws1[column + "2"] = submission_data["consortium_data_standard"]
         ws1[column + "3"] = submission_data["funding_consortium"]
         ws1[column + "4"] = submission_data["award_number"]
-        for col, milestone in zip(excel_columns(start_index), submission_data["milestone_achieved"]):
+
+
+        milestone_achieved = submission_data["milestone_achieved"]
+        if isinstance(milestone_achieved, str):
+            milestone_achieved = [milestone_achieved]
+        for col, milestone in zip(excel_columns(start_index), milestone_achieved):
             ws1[col + str(5)] = milestone
-        ws1[column + "6"] = submission_data["milestone_completion_date"]
+            
+        completion_dates = submission_data["milestone_completion_date"]
+        if isinstance(completion_dates, str):
+            completion_dates = [completion_dates]
+        for col, milestone_date in zip(excel_columns(start_index), completion_dates):
+            ws1[col + str(6)] = milestone_date
         ws1[column + "2"].font = font_submission
         ws1[column + "3"].font = font_submission
         ws1[column + "4"].font = font_submission
@@ -61,11 +71,10 @@ def create_excel(soda, upload_boolean, local_destination):
         ws1[column + "6"].font = font_submission
 
     # TODO: should milestone completion date also be an array?
-    rename_headers(ws1, len(submission_metadata_list[0]["milestone_achieved"]), 2)
+    range_extend_len = max(len(submission_metadata_list[0]["milestone_achieved"]), len(submission_metadata_list[0]["milestone_completion_date"]))
+    rename_headers(ws1, range_extend_len, 2)
 
     wb.save(destination)
-
-    print("Excel file created successfully at:", destination)
 
     wb.close()
 
@@ -76,16 +85,6 @@ def create_excel(soda, upload_boolean, local_destination):
 
     ## if generating directly on Pennsieve, then call upload function and then delete the destination path
     if upload_boolean:
-        print("Uploading Excel file to Pennsieve...")
         upload_metadata_file("submission.xlsx", soda, destination, True)
-        print("Excel file uploaded successfully to Pennsieve.")
     return {"size": size}
-
-
-
-
-
-
-
-
 

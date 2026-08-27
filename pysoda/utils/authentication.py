@@ -308,7 +308,6 @@ def get_access_token(api_key=None, api_secret=None):
     # global logger
     current_time = time.time()
 
-    print("Current time:", current_time)
 
 
 
@@ -316,10 +315,8 @@ def get_access_token(api_key=None, api_secret=None):
     if cached_access_token and current_time - last_fetch_time < TOKEN_CACHE_DURATION:
         return cached_access_token
     
-    print("Cached token not returned")
     r = requests.get(f"{PENNSIEVE_URL}/authentication/cognito-config")
     r.raise_for_status()
-    print("Cognito config response:", r.json())
 
     cognito_app_client_id = r.json()["tokenPool"]["appClientId"]
     cognito_region_name = r.json()["region"]
@@ -331,7 +328,6 @@ def get_access_token(api_key=None, api_secret=None):
         aws_secret_access_key="",
     )
 
-    print("boto3 client done")
 
     # use the default profile values for auth if no api_key or api_secret is provided
     if api_key is None or api_secret is None:

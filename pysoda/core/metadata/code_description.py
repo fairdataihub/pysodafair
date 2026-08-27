@@ -19,7 +19,6 @@ def create_excel(soda, upload, local_destination):
     validate_schema(soda["dataset_metadata"]["code_description"], SCHEMA_NAME_CODE_DESCRIPTION)
 
     wb = load_workbook("./" +destination)
-    print(wb.sheetnames)
     ws1 = wb[wb.sheetnames[0]]
 
     populate_input_output_information(ws1, soda)

@@ -87,159 +87,6 @@ uploaded_file_size = 0
 start_time_bf_upload = 0
 start_submit = 0
 metadatapath = join(userpath, "SODA", "SODA_metadata")
-ps_recognized_file_extensions = [
-    ".cram",
-    ".jp2",
-    ".jpx",
-    ".lsm",
-    ".ndpi",
-    ".nifti",
-    ".oib",
-    ".oif",
-    ".roi",
-    ".rtf",
-    ".swc",
-    ".abf",
-    ".acq",
-    ".adicht",
-    ".adidat",
-    ".aedt",
-    ".afni",
-    ".ai",
-    ".avi",
-    ".bam",
-    ".bash",
-    ".bcl",
-    ".bcl.gz",
-    ".bin",
-    ".brik",
-    ".brukertiff.gz",
-    ".continuous",
-    ".cpp",
-    ".csv",
-    ".curv",
-    ".cxls",
-    ".czi",
-    ".data",
-    ".dcm",
-    ".df",
-    ".dicom",
-    ".doc",
-    ".docx",
-    ".e",
-    ".edf",
-    ".eps",
-    ".events",
-    ".fasta",
-    ".fastq",
-    ".fcs",
-    ".feather",
-    ".fig",
-    ".gif",
-    ".h4",
-    ".h5",
-    ".hdf4",
-    ".hdf5",
-    ".hdr",
-    ".he2",
-    ".he5",
-    ".head",
-    ".hoc",
-    ".htm",
-    ".html",
-    ".ibw",
-    ".img",
-    ".ims",
-    ".ipynb",
-    ".jpeg",
-    ".jpg",
-    ".js",
-    ".json",
-    ".lay",
-    ".lh",
-    ".lif",
-    ".m",
-    ".mat",
-    ".md",
-    ".mef",
-    ".mefd.gz",
-    ".mex",
-    ".mgf",
-    ".mgh",
-    ".mgh.gz",
-    ".mgz",
-    ".mnc",
-    ".moberg.gz",
-    ".mod",
-    ".mov",
-    ".mp4",
-    ".mph",
-    ".mpj",
-    ".mtw",
-    ".ncs",
-    ".nd2",
-    ".nev",
-    ".nex",
-    ".nex5",
-    ".nf3",
-    ".nii",
-    ".nii.gz",
-    ".ns1",
-    ".ns2",
-    ".ns3",
-    ".ns4",
-    ".ns5",
-    ".ns6",
-    ".nwb",
-    ".ogg",
-    ".ogv",
-    ".ome.btf",
-    ".ome.tif",
-    ".ome.tif2",
-    ".ome.tif8",
-    ".ome.tiff",
-    ".ome.xml",
-    ".openephys",
-    ".pdf",
-    ".pgf",
-    ".png",
-    ".ppt",
-    ".pptx",
-    ".ps",
-    ".pul",
-    ".py",
-    ".r",
-    ".raw",
-    ".rdata",
-    ".rh",
-    ".rhd",
-    ".sh",
-    ".sldasm",
-    ".slddrw",
-    ".smr",
-    ".spikes",
-    ".svg",
-    ".svs",
-    ".tab",
-    ".tar",
-    ".tar.gz",
-    ".tcsh",
-    ".tdm",
-    ".tdms",
-    ".text",
-    ".tif",
-    ".tiff",
-    ".tsv",
-    ".txt",
-    ".vcf",
-    ".webm",
-    ".xlsx",
-    ".xml",
-    ".yaml",
-    ".yml",
-    ".zip",
-    ".zsh",
-]
 
 myds = ""
 initial_bfdataset_size = 0
@@ -880,426 +727,6 @@ def ps_create_new_dataset(datasetname, ps):
     except Exception as e:
         raise e
 
-double_extensions = [
-    ".ome.tiff",
-    ".ome.tif",
-    ".ome.tf2,",
-    ".ome.tf8",
-    ".ome.btf",
-    ".ome.xml",
-    ".brukertiff.gz",
-    ".mefd.gz",
-    ".moberg.gz",
-    ".nii.gz",
-    ".mgh.gz",
-    ".tar.gz",
-    ".bcl.gz",
-]
-
-
-def create_high_lvl_manifest_files_existing_ps(
-    soda, ps, my_tracking_folder
-):
-    """
-    Function to create manifest files for each high-level SPARC folder.
-
-    Args:
-        soda: soda dict with information about the dataset to be generated/modified
-    Action:
-        manifest_files_structure: dict including the local path of the manifest files
-    """
-    def get_name_extension(file_name):
-        double_ext = False
-        for ext in double_extensions:
-            if file_name.find(ext) != -1:
-                double_ext = True
-                break
-        ext = ""
-        name = ""
-        if double_ext == False:
-            name = os.path.splitext(file_name)[0]
-            ext = os.path.splitext(file_name)[1]
-        else:
-            ext = (
-                os.path.splitext(os.path.splitext(file_name)[0])[1]
-                + os.path.splitext(file_name)[1]
-            )
-            name = os.path.splitext(os.path.splitext(file_name)[0])[0]
-        return name, ext
-
-    def recursive_import_ps_manifest_info(
-        folder, my_relative_path, dict_folder_manifest, manifest_df
-    ):
-        """
-        Import manifest information from the Pennsieve dataset for the given folder and its children.
-        """
-
-        if len(folder['children']) == 0:
-            limit = 100
-            offset = 0 
-            ps_folder = {"children": []}
-            while True: 
-                r = requests.get(f"{PENNSIEVE_URL}/packages/{folder['content']['id']}?limit={limit}&offset={offset}", headers=create_request_headers(get_access_token()), json={"include": "files"})
-                r.raise_for_status()
-                page = r.json()
-                normalize_tracking_folder(page)
-                ps_folder["children"].extend(page)
-
-                if len(page) < limit:
-                    break
-                offset += limit
-
-            folder['children'] = ps_folder['children']
-
-        for _, folder_item in folder["children"]["folders"].items():
-            folder_name = folder_item['content']['name']
-            relative_path = generate_relative_path(
-                my_relative_path, folder_name
-            )
-            dict_folder_manifest = recursive_import_ps_manifest_info(
-                folder_item, relative_path, dict_folder_manifest, manifest_df
-            )
-        for _, file in folder["children"]["files"].items():
-            if file['content']['name'] != "manifest":
-                file_id = file['content']['id']
-                r = requests.get(f"{PENNSIEVE_URL}/packages/{file_id}/view", headers=create_request_headers(get_access_token()))
-                r.raise_for_status()
-                file_details = r.json()
-                file_name = file_details[0]["content"]["name"]
-                file_extension = splitext(file_name)[1]
-                file_name_with_extension = (
-                    splitext(file['content']['name'])[0] + file_extension
-                )
-                relative_path = generate_relative_path(
-                    my_relative_path, file_name_with_extension
-                )
-                dict_folder_manifest["filename"].append(relative_path)
-                # file type
-                file_extension = get_name_extension(file_name)
-                if file_extension == "":
-                    file_extension = "None"
-                dict_folder_manifest["file type"].append(file_extension)
-                # timestamp, description, Additional Metadata
-                if not manifest_df.empty:
-                    if relative_path in manifest_df["filename"].values:
-                        timestamp = manifest_df[
-                            manifest_df["filename"] == relative_path
-                        ]["timestamp"].iloc[0]
-                        description = manifest_df[
-                            manifest_df["filename"] == relative_path
-                        ]["description"].iloc[0]
-                        additional_metadata = manifest_df[
-                            manifest_df["filename"] == relative_path
-                        ]["Additional Metadata"].iloc[0]
-                    else:
-                        timestamp = ""
-                        description = ""
-                        additional_metadata = ""
-                    dict_folder_manifest["timestamp"].append(timestamp)
-                    dict_folder_manifest["description"].append(description)
-                    dict_folder_manifest["Additional Metadata"].append(
-                        additional_metadata
-                    )
-                else:
-                    dict_folder_manifest["timestamp"].append("")
-                    dict_folder_manifest["description"].append("")
-                    dict_folder_manifest["Additional Metadata"].append("")
-        return dict_folder_manifest
-
-    # Merge existing folders
-    def recursive_manifest_builder_existing_ps(
-        my_folder,
-        my_bf_folder,
-        my_bf_folder_exists,
-        my_relative_path,
-        dict_folder_manifest,
-    ):
-        if "folders" in my_folder.keys():
-            if my_bf_folder_exists:
-                (
-                    my_bf_existing_folders_name,
-                ) = ps_get_existing_folders_details(my_bf_folder['children']['folders'])
-            else:
-                my_bf_existing_folders_name = []
-            for folder_key, folder in my_folder["folders"].items():
-                relative_path = generate_relative_path(my_relative_path, folder_key)
-                if folder_key in my_bf_existing_folders_name:
-                    bf_folder = my_bf_folder["children"]["folders"][folder_key]
-                    bf_folder_exists = True
-                else:
-                    bf_folder = ""
-                    bf_folder_exists = False
-                dict_folder_manifest = recursive_manifest_builder_existing_ps(
-                    folder,
-                    bf_folder,
-                    bf_folder_exists,
-                    relative_path,
-                    dict_folder_manifest,
-                )
-        if "files" in my_folder.keys():
-            if my_bf_folder_exists:
-                (
-                    my_bf_existing_files_name,
-                    my_bf_existing_files_name_with_extension,
-                ) = ps_get_existing_files_details(my_bf_folder)
-            else:
-                my_bf_existing_files = []
-                my_bf_existing_files_name = []
-                my_bf_existing_files_name_with_extension = []
-            for file_key, file in my_folder["files"].items():
-                if file.get("location") == "local":
-                    file_path = file["path"]
-                    if isfile(file_path):
-                        desired_name = splitext(file_key)[0]
-                        file_extension = splitext(file_key)[1]
-                        # manage existing file request
-                        if existing_file_option == "skip" and file_key in my_bf_existing_files_name_with_extension:
-                            continue
-                        if existing_file_option == "replace" and file_key in my_bf_existing_files_name_with_extension:
-                            # remove existing from manifest
-                            filename = generate_relative_path(
-                                my_relative_path, file_key
-                            )
-                            filename_list = dict_folder_manifest["filename"]
-                            index_file = filename_list.index(filename)
-                            del dict_folder_manifest["filename"][index_file]
-                            del dict_folder_manifest["timestamp"][index_file]
-                            del dict_folder_manifest["description"][index_file]
-                            del dict_folder_manifest["file type"][index_file]
-                            del dict_folder_manifest["Additional Metadata"][
-                                index_file
-                            ]
-                            index_name = (
-                                my_bf_existing_files_name_with_extension.index(
-                                    file_key
-                                )
-                            )
-                            del my_bf_existing_files[index_name]
-                            del my_bf_existing_files_name[index_name]
-                            del my_bf_existing_files_name_with_extension[
-                                index_name
-                            ]
-                        if desired_name not in my_bf_existing_files_name:
-                            final_name = file_key
-                        else:
-                            # expected final name
-                            count_done = 0
-                            final_name = desired_name
-                            output = get_base_file_name(desired_name)
-                            if output:
-                                base_name = output[0]
-                                count_exist = output[1]
-                                while count_done == 0:
-                                    if final_name in my_bf_existing_files_name:
-                                        count_exist += 1
-                                        final_name = (
-                                            base_name + "(" + str(count_exist) + ")"
-                                        )
-                                    else:
-                                        count_done = 1
-                            else:
-                                count_exist = 0
-                                while count_done == 0:
-                                    if final_name in my_bf_existing_files_name:
-                                        count_exist += 1
-                                        final_name = (
-                                            desired_name
-                                            + " ("
-                                            + str(count_exist)
-                                            + ")"
-                                        )
-                                    else:
-                                        count_done = 1
-                            final_name = final_name + file_extension
-                            my_bf_existing_files_name.append(
-                                splitext(final_name)[0]
-                            )
-                        # filename
-                        filename = generate_relative_path(
-                            my_relative_path, final_name
-                        )
-                        dict_folder_manifest["filename"].append(filename)
-                        # timestamp
-                        file_path = file["path"]
-                        filepath = pathlib.Path(file_path)
-                        mtime = filepath.stat().st_mtime
-                        lastmodtime = datetime.fromtimestamp(mtime).astimezone(
-                            local_timezone
-                        )
-                        dict_folder_manifest["timestamp"].append(
-                            lastmodtime.isoformat()
-                            .replace(".", ",")
-                            .replace("+00:00", "Z")
-                        )
-                        # description
-                        if "description" in file.keys():
-                            dict_folder_manifest["description"].append(
-                                file["description"]
-                            )
-                        else:
-                            dict_folder_manifest["description"].append("")
-                        # file type
-                        if file_extension == "":
-                            file_extension = "None"
-                        dict_folder_manifest["file type"].append(file_extension)
-                        # addtional metadata
-                        if "additional-metadata" in file.keys():
-                            dict_folder_manifest["Additional Metadata"].append(
-                                file["additional-metadata"]
-                            )
-                        else:
-                            dict_folder_manifest["Additional Metadata"].append("")
-        return dict_folder_manifest
-
-    double_extensions = [
-        ".ome.tiff",
-        ".ome.tif",
-        ".ome.tf2,",
-        ".ome.tf8",
-        ".ome.btf",
-        ".ome.xml",
-        ".brukertiff.gz",
-        ".mefd.gz",
-        ".moberg.gz",
-        ".nii.gz",
-        ".mgh.gz",
-        ".tar.gz",
-        ".bcl.gz",
-    ]
-
-    try:
-        # create local folder to save manifest files temporarly (delete any existing one first)
-        shutil.rmtree(manifest_folder_path) if isdir(manifest_folder_path) else 0
-        makedirs(manifest_folder_path)
-
-        # import info about files already on ps
-        dataset_structure = soda["dataset-structure"]
-        manifest_dict_save = {}
-        for high_level_folder_key, high_level_folder in my_tracking_folder["children"]["folders"].items():
-            if (
-                high_level_folder_key in dataset_structure["folders"].keys()
-            ):
-
-                relative_path = ""
-                dict_folder_manifest = {}
-                # Initialize dict where manifest info will be stored
-                dict_folder_manifest["filename"] = []
-                dict_folder_manifest["timestamp"] = []
-                dict_folder_manifest["description"] = []
-                dict_folder_manifest["file type"] = []
-                dict_folder_manifest["Additional Metadata"] = []
-
-                # pull manifest file into if exists 
-                manifest_df = pd.DataFrame()
-                for file_key, file in high_level_folder['children']['files'].items():
-                    file_id = file['content']['id']
-                    r = requests.get(f"{PENNSIEVE_URL}/packages/{file_id}/view", headers=create_request_headers(get_access_token()))
-                    r.raise_for_status()
-                    file_details = r.json()
-                    file_name_with_extension = file_details[0]["content"]["name"]
-                    if file_name_with_extension in manifest_sparc:
-                        file_id_2 = file_details[0]["content"]["id"]
-                        r = requests.get(f"{PENNSIEVE_URL}/packages/{file_id}/files/{file_id_2}", headers=create_request_headers(get_access_token()))
-                        r.raise_for_status()
-                        file_url_info = r.json()
-                        file_url = file_url_info["url"]
-                        manifest_df = pd.read_excel(file_url, engine="openpyxl")
-                        manifest_df = manifest_df.fillna("")
-                        if (
-                            "filename" not in manifest_df.columns
-                            or "description" not in manifest_df.columns
-                            or "Additional Metadata" not in manifest_df.columns
-                        ):
-                            manifest_df = pd.DataFrame()
-                        break
-
-                # store the data frame pulled from Pennsieve into a dictionary
-                dict_folder_manifest =  recursive_import_ps_manifest_info(
-                    high_level_folder, relative_path, dict_folder_manifest, manifest_df
-                )
-
-                manifest_dict_save[high_level_folder_key] = {
-                    "manifest": dict_folder_manifest,
-                    "bf_folder": high_level_folder,
-                }
-
-        # import info from local files to be uploaded
-        local_timezone = TZLOCAL()
-        manifest_files_structure = {}
-        existing_folder_option = soda["generate-dataset"]["if-existing"]
-        existing_file_option = soda["generate-dataset"][
-            "if-existing-files"
-        ]
-        for folder_key, folder in dataset_structure["folders"].items():
-            relative_path = ""
-
-            if (
-                folder_key in manifest_dict_save
-                and existing_folder_option == "merge"
-            ):
-                bf_folder = manifest_dict_save[folder_key]["bf_folder"]
-                bf_folder_exists = True
-                dict_folder_manifest = manifest_dict_save[folder_key]["manifest"]
-
-            elif (
-                folder_key in manifest_dict_save
-                and folder_key
-                not in my_tracking_folder["children"]["folders"].keys()
-                and existing_folder_option == "skip"
-            ):
-                continue
-
-            else:
-                bf_folder = ""
-                bf_folder_exists = False
-                dict_folder_manifest = {}
-                dict_folder_manifest["filename"] = []
-                dict_folder_manifest["timestamp"] = []
-                dict_folder_manifest["description"] = []
-                dict_folder_manifest["file type"] = []
-                dict_folder_manifest["Additional Metadata"] = []
-
-            dict_folder_manifest = recursive_manifest_builder_existing_ps(
-                folder, bf_folder, bf_folder_exists, relative_path, dict_folder_manifest
-            )
-
-            # create high-level folder at the temporary location
-            folderpath = join(manifest_folder_path, folder_key)
-            makedirs(folderpath)
-
-            # save manifest file
-            manifestfilepath = join(folderpath, "manifest.xlsx")
-            df = pd.DataFrame.from_dict(dict_folder_manifest)
-            df.to_excel(manifestfilepath, index=None, header=True)
-            wb = load_workbook(manifestfilepath)
-            ws = wb.active
-
-            blueFill = PatternFill(
-                start_color="9DC3E6", fill_type="solid"
-            )
-            greenFill = PatternFill(
-                start_color="A8D08D", fill_type="solid"
-            )
-            yellowFill = PatternFill(
-                start_color="FFD965", fill_type="solid"
-            )
-            ws['A1'].fill = blueFill
-            ws['B1'].fill = greenFill
-            ws['C1'].fill = greenFill
-            ws['D1'].fill = greenFill
-            ws['E1'].fill = yellowFill
-            wb.save(manifestfilepath)
-
-            manifest_files_structure[folder_key] = manifestfilepath
-
-        return manifest_files_structure
-
-    except Exception as e:
-        raise e
-
-
-
-
 
 def generate_relative_path(x, y):
     return x + "/" + y if x else y
@@ -1341,19 +768,131 @@ def ps_get_existing_files_details(ps_folder):
 
     files = ps_folder["children"]["files"]
     double_extensions = [
-        ".ome.tiff",
+        ".tar.gz",
+        ".tar.bz2",
+        ".tar.xz",
+        ".tar.zst",
+        ".tar.lz",
+        ".tar.lz4",
+        ".tar.lzma",
+        ".tgz",
+        ".tbz",
+        ".tbz2",
+        ".txz",
+        ".csv.gz",
+        ".tsv.gz",
+        ".txt.gz",
+        ".json.gz",
+        ".jsonl.gz",
+        ".ndjson.gz",
+        ".xml.gz",
+        ".yaml.gz",
+        ".yml.gz",
+        ".log.gz",
+        ".dat.gz",
+        ".data.gz",
+        ".bin.gz",
+        ".sql.gz",
+        ".nii.gz",
+        ".nii.z",
+        ".mgh.gz",
+        ".gii.gz",
+        ".annot.gz",
+        ".label.gz",
+        ".trk.gz",
+        ".tck.gz",
+        ".mif.gz",
+        ".fif.gz",
+        ".edf.gz",
+        ".bdf.gz",
+        ".set.gz",
+        ".fdt.gz",
+        ".vhdr.gz",
+        ".vmrk.gz",
+        ".eeg.gz",
+        ".dcm.gz",
+        ".dicom.gz",
+        ".ima.gz",
+        ".nrrd.gz",
+        ".nhdr.gz",
+        ".mha.gz",
+        ".mhd.gz",
+        ".hdr.gz",
+        ".img.gz",
         ".ome.tif",
-        ".ome.tf2,",
-        ".ome.tf8",
+        ".ome.tiff",
         ".ome.btf",
+        ".ome.tif2",
+        ".ome.tif8",
         ".ome.xml",
+        ".ome.zarr",
+        ".ome.zarr.zip",
+        ".tif.gz",
+        ".tiff.gz",
+        ".btf.gz",
         ".brukertiff.gz",
         ".mefd.gz",
         ".moberg.gz",
-        ".nii.gz",
-        ".mgh.gz",
-        ".tar.gz",
+        ".fastq.gz",
+        ".fq.gz",
+        ".fasta.gz",
+        ".fa.gz",
+        ".fna.gz",
+        ".faa.gz",
+        ".sam.gz",
+        ".bam.gz",
+        ".cram.gz",
+        ".vcf.gz",
+        ".bcf.gz",
+        ".bed.gz",
+        ".gff.gz",
+        ".gff3.gz",
+        ".gtf.gz",
+        ".wig.gz",
+        ".bedgraph.gz",
+        ".bg.gz",
         ".bcl.gz",
+        ".scf.gz",
+        ".vcf.bgz",
+        ".bed.bgz",
+        ".bedgraph.bgz",
+        ".gff.bgz",
+        ".gff3.bgz",
+        ".gtf.bgz",
+        ".h5.gz",
+        ".hdf.gz",
+        ".hdf5.gz",
+        ".nc.gz",
+        ".netcdf.gz",
+        ".mat.gz",
+        ".rds.gz",
+        ".rda.gz",
+        ".pickle.gz",
+        ".pkl.gz",
+        ".shp.zip",
+        ".geojson.gz",
+        ".gpkg.gz",
+        ".kml.gz",
+        ".gpx.gz",
+        ".las.gz",
+        ".sqlite.gz",
+        ".db.gz",
+        ".mdb.gz",
+        ".parquet.gz",
+        ".feather.gz",
+        ".arrow.gz",
+        ".cdf.gz",
+        ".fits.gz",
+        ".fit.gz",
+        ".raw.gz",
+        ".pdf.gz",
+        ".html.gz",
+        ".htm.gz",
+        ".md.gz",
+        ".rst.gz",
+        ".zip.gz",
+        ".7z.gz",
+        ".rar.gz",
     ]
 
 
@@ -1375,6 +914,7 @@ def ps_get_existing_files_details(ps_folder):
                 if("extension" not in root_children):
                     file_name_with_extension = verify_file_name(item_name,"")
                 else:
+                    # NOTE: This handles old Pennsieve database methods for storing filenames
                     file_name_with_extension = verify_file_name(item_name, root_children["extension"])
 
             if file_name_with_extension == "":
@@ -1390,6 +930,7 @@ def ps_get_existing_files_details(ps_folder):
                 if "extension" not in file:
                     file_name_with_extension = verify_file_name(file_name,"")
                 else:
+                    # NOTE: This handles old Pennsieve database methods for storing filenames
                     file_name_with_extension = verify_file_name(file_name, file["extension"])
             if file_name_with_extension == "":
                 continue
@@ -1696,6 +1237,38 @@ total_metadata_files = 0
 total_manifest_files = 0
 
 
+def set_upload_state(upload_progress):
+    """
+        If an upload is being restarted a state object can be passed in to set the state according to where the upload left off.
+        
+        Args:
+            upload_progress: (dict[str, Any]): A state object that can have the following keys
+                - manifest-id: The ID from the Pennsieve Agent for the upload manifest
+                - size-of-dataset: The size (in bytes) of the dataset being uploaded
+                - number-of-files: The number of files in the dataset
+                - bytesPerFile: A dictionary with every file and the amount of bytes uploaded to pennsieve thus far.
+                - list-of-files-to-rename: A list containing the current and target names of files that need to be renamed
+                - dataset-d: The id of the Pennsieve dataset 
+                - current-stage: Can be setup, upload, rename, verify. Unnecessary for backend. 
+    """
+    global main_total_generate_dataset_size
+    global bytes_uploaded_per_file
+    global main_generated_dataset_size
+
+    # check if upload_progress has any keys - if none then no state to set
+    if len(upload_progress.keys()) == 0:
+        return
+
+    if "size-of-dataset" in upload_progress:
+        main_total_generate_dataset_size = upload_progress["size-of-dataset"]
+    if "bytesPerFile" in upload_progress:
+        # will set main_generated_dataset_size in subscriber
+        bytes_uploaded_per_file = upload_progress["bytesPerFile"]
+        main_generated_dataset_size = sum(bytes_uploaded_per_file.values())
+        
+
+    return 
+
 def create_metadata_files_for_upload(soda, list_upload_metadata_files, existing_root_files=None, existing_file_option="skip", ps=None):
     """
     Creates metadata files (Excel and text) based on soda["dataset_metadata"] and appends them to the upload list.
@@ -1897,6 +1470,8 @@ def create_upload_information_new(soda, ps, relative_path):
                                 "final_file_name": file_key,
                                 "id": "",  # Will be set during rename phase
                             }
+
+                            
                     
                     projected_name = splitext(basename(file_path))[0]
                     projected_name_w_extension = basename(file_path)
@@ -2120,6 +1695,8 @@ def create_upload_information_existing(soda, ds, ps, relative_path):
                                         "final_file_name": file_key,
                                         "id": "",
                                     }
+
+                                    
                                 # Handle the case for existing_file_option is not "replace" 
                                 else:
                                     # 1) If the original exists on Pennsieve, add mapping with the file's id and skip uploading the local file.
@@ -2135,6 +1712,7 @@ def create_upload_information_existing(soda, ds, ps, relative_path):
                                             "final_file_name": file_key,
                                             "id": my_file["content"]["id"],
                                         }
+                                        
                                         # original exists — skip uploading local file (rename will handle it)
                                         continue
 
@@ -2151,6 +1729,7 @@ def create_upload_information_existing(soda, ds, ps, relative_path):
                                         "final_file_name": file_key,
                                         "id": "",
                                     }
+                                    
                             elif file_key in ps_folder_children["files"] and existing_file_option == "replace":
                                 # Handle non-renamed files - delete if replace option is set
                                 my_file = ps_folder_children["files"][file_key]
@@ -2218,9 +1797,6 @@ def create_upload_information_existing(soda, ds, ps, relative_path):
                             bytes_file_path_dict[file_path] = file_size
 
                             my_bf_existing_files_name_with_extension.append(desired_name_with_extension)
-
-                            # add to projected dataset size to be generated
-                            main_total_generate_dataset_size += file_size
 
                 if list_local_files:
                     ds_name = soda["ps-dataset-selected"]["dataset-name"]
@@ -2292,9 +1868,9 @@ def create_upload_information_existing(soda, ds, ps, relative_path):
     # return and mark upload as completed if nothing is added to the manifest and no files need to be renamed
     if total_files < 1 and not list_of_files_to_rename:
         logger.info("No files found to upload or rename.")
-        main_curate_progress_message = "No files were uploaded in this session and no files need to be renamed"
+        main_curate_progress_message = "There are no files to upload to Pennsieve or files to rename on Pennsieve."
         main_curate_status = "Done"
-        raise NoUploadActions("No files need to be uploaded or renamed.")
+        raise NoUploadActions("There are no files to upload to Pennsieve or files to rename on Pennsieve.")
 
     return {
         "list_upload_files": list_upload_files,
@@ -2401,7 +1977,9 @@ def create_upload_manifest(soda, ps, ds):
             logger.info("Manifest creation: Failed 0 files added to dataset.")
             end = timer()
             logger.info(f"Time for ps_upload_to_dataset function: {timedelta(seconds=end - start)}")
-            raise NoUploadActions("There are no files to upload to Pennsieve or files toe rename on Pennsieve.")
+            main_curate_progress_message = "There are no files to upload to Pennsieve or files to rename on Pennsieve."
+            main_curate_status = "Done"
+            raise NoUploadActions("There are no files to upload to Pennsieve or files to rename on Pennsieve.")
         
         # user does not have files to upload but there are imported files that exist on Pennsieve that need to be renamed
         if total_files < 1 and list_of_files_to_rename:
@@ -2511,10 +2089,19 @@ def create_upload_manifest(soda, ps, ds):
                 "number_of_files": total_files
                 }
     except Exception as e:
-        logger.error(f"An error occurred in ps_upload_to_dataset function: {str(e)}")
+        logger.error(f"An error occurred in create_upload_manifest function: {str(e)}")
         raise e
 
 def rename_files(dataset_id, list_of_files_to_rename):
+    """
+        Inputs: 
+            - dataset_id: Pennsieve ID for dataset
+            - list_of_files_to_rename: List of files on Pennsieve that need to be renamed and target name
+        Assumption: All files are already on Pennsieve.
+        Renames files from the list of files to rename. Does not differentiate between files already renamed and files that are deleted. If cannot find a file
+        it considers it already renamed and moves on.
+
+    """
 
     global main_curate_progress_message
     global main_total_generate_dataset_size
@@ -2605,7 +2192,6 @@ def rename_files(dataset_id, list_of_files_to_rename):
 
     # 6. Rename files
     logger.info("ps_create_new_dataset (optional) step 8 rename files")
-    logger.info("file-rename-fix-log: Entered rename step, list_of_files_to_rename keys: %s", list(list_of_files_to_rename.keys()))
     main_curate_progress_message = ("Preparing files to be renamed...")
     collection_ids = {}
     
@@ -2614,28 +2200,10 @@ def rename_files(dataset_id, list_of_files_to_rename):
     r.raise_for_status()
     dataset_content = r.json()["children"]
     
-    # Scan for collections with bounded retries (simple GET per attempt)
-    collections_found = False
-    collection_retry_count = 0
-    max_collection_retries = 5
-    while not collections_found and collection_retry_count < max_collection_retries:
-        for item in dataset_content:
-            if item["content"].get("packageType") == "Collection":
-                collections_found = True
-                collection_ids[item["content"]["name"]] = {"id": item["content"]["nodeId"]}
-                continue
-
-        if not collections_found:
-            collection_retry_count += 1
-            logger.info("No collections found, retrying after 10s... (attempt %d)", collection_retry_count)
-            time.sleep(10)
-            r = requests.get(f"{PENNSIEVE_URL}/datasets/{dataset_id}", headers=create_request_headers(get_access_token()))
-            r.raise_for_status()
-            dataset_content = r.json().get("children", [])
-            logger.info(f"After retry {collection_retry_count}, dataset_content now has {len(dataset_content)} items")
-
-    if not collections_found:
-        logger.info(f"Still no collections found after {max_collection_retries} retries.")
+    for item in dataset_content:
+        if item["content"].get("packageType") == "Collection":
+            collection_ids[item["content"]["name"]] = {"id": item["content"]["nodeId"]}
+            continue
 
 
     # Process each key in rename map
@@ -2689,10 +2257,8 @@ def rename_files(dataset_id, list_of_files_to_rename):
             logger.info(f"No 'id' key found for relative_path '{relative_path}'")
             continue
         
-        collection_id = list_of_files_to_rename[relative_path]["id"]
         high_lvl_folder_name = list_of_files_to_rename[relative_path].get("high_lvl_folder", "")
         # Check if this is a dataset root file (key='' and no high_lvl_folder)
-        is_dataset_root = (relative_path == '' and not high_lvl_folder_name)
         
         for file in list_of_files_to_rename[relative_path].keys():
             if file == "id" or file == "high_lvl_folder":
@@ -2700,7 +2266,7 @@ def rename_files(dataset_id, list_of_files_to_rename):
             new_name = list_of_files_to_rename[relative_path][file]["final_file_name"]
             file_id = list_of_files_to_rename[relative_path][file]["id"]
 
-            if file_id != "":
+            if file_id:
                 # id was found so make api call to rename with final file name
                 try:
                     r = requests.put(f"{PENNSIEVE_URL}/packages/{file_id}?updateStorage=true", json={"name": new_name}, headers=create_request_headers(get_access_token()))
@@ -2708,68 +2274,10 @@ def rename_files(dataset_id, list_of_files_to_rename):
                 except Exception as e:
                     if r.status_code == 500:
                         continue
-                main_generated_dataset_size += 1
-            else:
-                # id was not found so keep trying to get the id until it is found
-                all_ids_found = False
-                retry_attempts = 0
-                # Scaling sleep times: exponential-ish backoff up to 2 hours
-                # 5s, 10s, 30s, 2m, 5m, 10m, 20m, 30m, 60m, 120m
-                retry_sleep_times = [5, 10, 30, 120, 300, 600, 1200, 1800, 3600, 7200]
-                
-                while not all_ids_found and retry_attempts < len(retry_sleep_times):
-                    sleep_duration = retry_sleep_times[retry_attempts]
-                    # Update UI progress so user knows we're waiting for Pennsieve to show the uploaded file
-                    main_curate_progress_message = (
-                        f"Waiting for Pennsieve to process uploads: looking for '{file}' (retry {retry_attempts + 1}/{len(retry_sleep_times)}) — sleeping {sleep_duration}s"
-                    )
-                    logger.info(f"Waiting {sleep_duration}s before retry attempt {retry_attempts + 1} to find file ID for '{file}'")
-                    time.sleep(sleep_duration)
-                    retry_attempts += 1
+            # if file not found on Pennsieve assume it is already renamed as opposed to deleted. 
+            # if deleted it is not the function's job to notify the user.
+            main_generated_dataset_size += 1
 
-                    limit = 100
-                    offset = 0
-                    dataset_content = []
-
-                    # Use correct endpoint: /datasets/ for root-level files, /packages/ for folder files
-                    while True:
-                        if is_dataset_root:
-                            r = requests.get(f"{PENNSIEVE_URL}/datasets/{collection_id}?limit={limit}&offset={offset}", headers=create_request_headers(get_access_token()))
-                        else:
-                            r = requests.get(f"{PENNSIEVE_URL}/packages/{collection_id}?limit={limit}&offset={offset}", headers=create_request_headers(get_access_token()))
-                        r.raise_for_status()
-                        page = r.json().get("children", [])
-                        dataset_content.extend(page)
-                        if len(page) < limit:
-                            break
-                        offset += limit
-                    
-                    for item in dataset_content:
-                        if item["content"]["packageType"] != "Collection":
-                            file_name = item["content"]["name"]
-                            found_file_id = item["content"]["nodeId"]
-
-                            if file_name == file:
-                                # id was found so make api call to rename with final file name
-                                try:
-                                    r = requests.put(f"{PENNSIEVE_URL}/packages/{found_file_id}?updateStorage=true", json={"name": new_name}, headers=create_request_headers(get_access_token()))
-                                    r.raise_for_status()
-                                except Exception as e:
-                                    if r.status_code == 500:
-                                        continue
-                                main_generated_dataset_size += 1
-                                all_ids_found = True
-                                break
-                
-                if not all_ids_found:
-                    total_wait_time = sum(retry_sleep_times)
-                    error_msg = (
-                        f"Could not find file ID for '{file}' in '{relative_path}' after {len(retry_sleep_times)} retry attempts "
-                        f"(total wait time: {total_wait_time}s). The file may not have been properly processed during upload. "
-                        f"Please retry the upload."
-                    )
-                    logger.error(error_msg)
-                    raise PennsieveUploadException(error_msg)
   
 def monitor_subscriber_progress(events_dict):
     """
@@ -3180,7 +2688,7 @@ def validate_dataset_structure(soda):
 
 
 
-def reset_upload_session_environment(resume):
+def reset_upload_session_environment():
     global main_curate_status
     global main_curate_progress_message
     global main_total_generate_dataset_size
@@ -3204,8 +2712,6 @@ def reset_upload_session_environment(resume):
     generate_start_time = time.time()
 
     # variables for tracking the progress of the curate process on the frontend 
-    main_curate_status = ""
-    main_curate_progress_message = "Starting..."
     main_total_generate_dataset_size = 0
     main_generated_dataset_size = 0
     main_curation_uploaded_files = 0
@@ -3213,7 +2719,7 @@ def reset_upload_session_environment(resume):
     generated_dataset_id = None
     curation_error_message = ""
 
-    main_curate_status = "Curating"
+    main_curate_status = "Starting"
     main_curate_progress_message = "Starting dataset curation"
     main_generate_destination = ""
     main_initial_bfdataset_size = 0
@@ -3303,41 +2809,57 @@ def generate_local_dataset(soda):
     list_move_files = []
     dataset_structure = soda["dataset-structure"]
 
-    for folder_key, folder in dataset_structure["folders"].items():
-        folderpath = join(datasetpath, folder_key)
-        mkdir(folderpath)
-        list_copy_files, list_move_files = recursive_dataset_scan(
-            folder, folderpath, list_copy_files, list_move_files
-        )
+    # Recursively scan the dataset structure to compile lists of files to copy and move
+    list_copy_files, list_move_files = recursive_dataset_scan(
+        dataset_structure, datasetpath, list_copy_files, list_move_files
+    )
 
     # 3. Add high-level metadata files in the list
+    # Only create metadata files if they don't already exist in the dataset structure (e.g., from imported spreadsheet files)
     if "dataset_metadata" in soda.keys():
         logger.info("generate_dataset_locally (optional) step 3 handling dataset_metadata")
         metadata_files = soda["dataset_metadata"]
-        # log the metadata files that will be created
-        for file_key, _ in metadata_files.items():
-            if file_key == "subjects":
-                subjects.create_excel(soda, False, join(datasetpath, "subjects.xlsx"))
-            elif file_key == "samples":
-                samples.create_excel(soda, False, join(datasetpath, "samples.xlsx"))
-            elif file_key == "code_description":
-                code_description.create_excel(soda, False, join(datasetpath, "code_description.xlsx"))
-            elif file_key == "dataset_description": 
-                dataset_description.create_excel(soda, False, join(datasetpath, "dataset_description.xlsx"))
-            elif file_key == "performances":
-                performances.create_excel(soda, False, join(datasetpath, "performances.xlsx"))
-            elif file_key == "resources":
-                resources.create_excel(soda, False, join(datasetpath, "resources.xlsx"))
-            elif file_key == "sites":
-                sites.create_excel(soda, False, join(datasetpath, "sites.xlsx"))
-            elif file_key == "submission":
-                submission.create_excel(soda, False, join(datasetpath, "submission.xlsx"))
-            elif file_key == "README.md":
-                text_metadata.create_text_file(soda, False, join(datasetpath, "README.md"), "README.md")
-            elif file_key == "CHANGES":
-                text_metadata.create_text_file(soda, False, join(datasetpath, "CHANGES"), "CHANGES")
-            elif file_key == "LICENSE":
-                text_metadata.create_text_file(soda, False, join(datasetpath, "LICENSE"), "LICENSE")
+        logger.info(f"metadata_files in soda['dataset_metadata']: {metadata_files}")
+        
+        for file_key in metadata_files:
+            # Check if the metadata file already exists in the dataset structure
+            file_name = f"{file_key}.xlsx" if file_key not in ["README.md", "CHANGES", "LICENSE"] else file_key            
+            if file_name in dataset_structure.get("files", {}):
+                # File already exists in structure (from import), skip creation
+                logger.info(f"Metadata file {file_key} already exists in dataset structure, skipping creation")
+                continue
+
+            output_path = join(datasetpath, file_name)
+            
+            try:
+                if file_key == "subjects":
+                    subjects.create_excel(soda, False, output_path)
+                elif file_key == "samples":
+                    samples.create_excel(soda, False, output_path)
+                elif file_key == "code_description":
+                    code_description.create_excel(soda, False, output_path)
+                elif file_key == "dataset_description": 
+                    dataset_description.create_excel(soda, False, output_path)
+                elif file_key == "performances":
+                    performances.create_excel(soda, False, output_path)
+                elif file_key == "resources":
+                    resources.create_excel(soda, False, output_path)
+                elif file_key == "sites":
+                    sites.create_excel(soda, False, output_path)
+                elif file_key == "submission":
+                    submission.create_excel(soda, False, output_path)
+                elif file_key == "README.md":
+                    text_metadata.create_text_file(soda, False, output_path, "README.md")
+                elif file_key == "CHANGES":
+                    text_metadata.create_text_file(soda, False, output_path, "CHANGES")
+                elif file_key == "LICENSE":
+                    text_metadata.create_text_file(soda, False, output_path, "LICENSE")
+                else:
+                    logger.warning(f"Unknown metadata file_key: {file_key}, skipping")
+                logger.info(f"Successfully created metadata file {file_key}")
+            except Exception as e:
+                logger.error(f"Error creating metadata file {file_key}: {str(e)}", exc_info=True)
+
 
     # 4. Add manifest files in the list
     if "manifest_file" in soda["dataset_metadata"].keys():
@@ -3601,22 +3123,149 @@ def generate_manifest_file_locally(generate_purpose, soda):
     open_file(manifest_destination)
     return {"success_message_or_manifest_destination": "success"}
 
+recognized_double_extensions = [
+    ".tar.gz",
+    ".tar.bz2",
+    ".tar.xz",
+    ".tar.zst",
+    ".tar.lz",
+    ".tar.lz4",
+    ".tar.lzma",
+    ".tgz",
+    ".tbz",
+    ".tbz2",
+    ".txz",
+    ".csv.gz",
+    ".tsv.gz",
+    ".txt.gz",
+    ".json.gz",
+    ".jsonl.gz",
+    ".ndjson.gz",
+    ".xml.gz",
+    ".yaml.gz",
+    ".yml.gz",
+    ".log.gz",
+    ".dat.gz",
+    ".data.gz",
+    ".bin.gz",
+    ".sql.gz",
+    ".nii.gz",
+    ".nii.z",
+    ".mgh.gz",
+    ".gii.gz",
+    ".annot.gz",
+    ".label.gz",
+    ".trk.gz",
+    ".tck.gz",
+    ".mif.gz",
+    ".fif.gz",
+    ".edf.gz",
+    ".bdf.gz",
+    ".set.gz",
+    ".fdt.gz",
+    ".vhdr.gz",
+    ".vmrk.gz",
+    ".eeg.gz",
+    ".dcm.gz",
+    ".dicom.gz",
+    ".ima.gz",
+    ".nrrd.gz",
+    ".nhdr.gz",
+    ".mha.gz",
+    ".mhd.gz",
+    ".hdr.gz",
+    ".img.gz",
+    ".ome.tif",
+    ".ome.tiff",
+    ".ome.btf",
+    ".ome.tif2",
+    ".ome.tif8",
+    ".ome.xml",
+    ".ome.zarr",
+    ".ome.zarr.zip",
+    ".tif.gz",
+    ".tiff.gz",
+    ".btf.gz",
+    ".brukertiff.gz",
+    ".mefd.gz",
+    ".moberg.gz",
+    ".fastq.gz",
+    ".fq.gz",
+    ".fasta.gz",
+    ".fa.gz",
+    ".fna.gz",
+    ".faa.gz",
+    ".sam.gz",
+    ".bam.gz",
+    ".cram.gz",
+    ".vcf.gz",
+    ".bcf.gz",
+    ".bed.gz",
+    ".gff.gz",
+    ".gff3.gz",
+    ".gtf.gz",
+    ".wig.gz",
+    ".bedgraph.gz",
+    ".bg.gz",
+    ".bcl.gz",
+    ".scf.gz",
+    ".vcf.bgz",
+    ".bed.bgz",
+    ".bedgraph.bgz",
+    ".gff.bgz",
+    ".gff3.bgz",
+    ".gtf.bgz",
+    ".h5.gz",
+    ".hdf.gz",
+    ".hdf5.gz",
+    ".nc.gz",
+    ".netcdf.gz",
+    ".mat.gz",
+    ".rds.gz",
+    ".rda.gz",
+    ".pickle.gz",
+    ".pkl.gz",
+    ".shp.zip",
+    ".geojson.gz",
+    ".gpkg.gz",
+    ".kml.gz",
+    ".gpx.gz",
+    ".las.gz",
+    ".sqlite.gz",
+    ".db.gz",
+    ".mdb.gz",
+    ".parquet.gz",
+    ".feather.gz",
+    ".arrow.gz",
+    ".cdf.gz",
+    ".fits.gz",
+    ".fit.gz",
+    ".raw.gz",
+    ".pdf.gz",
+    ".html.gz",
+    ".htm.gz",
+    ".md.gz",
+    ".rst.gz",
+    ".zip.gz",
+    ".7z.gz",
+    ".rar.gz",
+]
+
 
 
 def generate_manifest_file_data(dataset_structure):
-    # Helper: Determine file extension (handles double extensions).
-    # ``ps_recognized_file_extensions`` may contain extensions where one is a
-    # suffix of another (for example ".tar" and ".tar.gz").  If we iterate
-    # naively we can return the shorter extension and strip the wrong suffix.
-    # To avoid this we sort the list by length (longest first) and perform a
-    # case-insensitive comparison.
+    # Helper: Determine file extension (handles any extensions).
     def get_file_extension(filename):
-        lower_name = filename.lower()
-        for ext in sorted(ps_recognized_file_extensions, key=len, reverse=True):
-            if lower_name.endswith(ext.lower()):
-                return ext
-        # fallback to the standard splitext if nothing matches
-        return os.path.splitext(filename)[1]
+        suffixes = pathlib.Path(filename).suffixes
+        if len(suffixes) == 1:
+            return suffixes[-1]
+        
+        suffix_str = "".join(suffixes).lower()
+        if suffix_str in recognized_double_extensions:
+            return suffix_str
+
+        return suffixes[-1]
+        
 
     # Helper: Create a manifest row for a folder
     def create_folder_entry(folder_name, path_parts):
@@ -3656,7 +3305,6 @@ def generate_manifest_file_data(dataset_structure):
 
     # Recursive traversal of folders and files
     def traverse_folders(folder, path_parts):
-        logger.info(f"[TRAVERSE] Starting traverse at path_parts={path_parts}")
         if not manifest_data:
             manifest_data.append(header_row)
 
@@ -3682,7 +3330,6 @@ def generate_manifest_file_data(dataset_structure):
 
         # Process subfolders
         for subfolder_name, subfolder in folder.get("folders", {}).items():
-            logger.info(f"[TRAVERSE] Processing subfolder: {subfolder_name} at path_parts: {path_parts}")
             manifest_data.append(create_folder_entry(subfolder_name, path_parts))
             traverse_folders(subfolder, path_parts + [subfolder_name])
 

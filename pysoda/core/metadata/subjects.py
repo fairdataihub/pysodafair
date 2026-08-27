@@ -142,8 +142,6 @@ def create_excel(soda, upload_boolean, local_destination):
 
             # check if the field is already in the custom_headers_to_column dictionary
             if field_name not in custom_headers_to_column:
-                print(field_name)
-
 
                 custom_headers_to_column[field_name] = len(custom_headers_to_column.keys()) + 1
 
