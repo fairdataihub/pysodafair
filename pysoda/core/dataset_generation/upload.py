@@ -3257,6 +3257,9 @@ def generate_manifest_file_data(dataset_structure):
     # Helper: Determine file extension (handles any extensions).
     def get_file_extension(filename):
         suffixes = pathlib.Path(filename).suffixes
+        # If there are no suffixes, (i.e., the file has no extension), return an empty string
+        if len(suffixes) == 0:
+            return ""
         if len(suffixes) == 1:
             return suffixes[-1]
         
